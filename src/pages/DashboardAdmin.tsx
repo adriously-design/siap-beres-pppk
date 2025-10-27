@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImportUserDialog } from "@/components/ImportUserDialog";
 
 interface AdminStats {
   totalUsers: number;
@@ -191,13 +192,14 @@ export default function DashboardAdmin() {
                 Manajemen Pengguna
               </CardTitle>
               <CardDescription>
-                Kelola akun Calon PPPK
+                Kelola dan import akun Calon PPPK
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <Badge variant="outline" className="text-lg px-4 py-2">
                 {stats.totalUsers} Pengguna
               </Badge>
+              <ImportUserDialog />
             </CardContent>
           </Card>
 
