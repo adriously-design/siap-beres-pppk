@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ImportUserDialog } from "@/components/ImportUserDialog";
 
 interface AdminStats {
   totalUsers: number;
@@ -16,6 +17,7 @@ interface AdminStats {
 }
 
 export default function DashboardAdmin() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
     totalDocuments: 0,
@@ -185,7 +187,7 @@ export default function DashboardAdmin() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/manajemen-pengguna")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
@@ -199,7 +201,13 @@ export default function DashboardAdmin() {
               <Badge variant="outline" className="text-lg px-4 py-2">
                 {stats.totalUsers} Pengguna
               </Badge>
-              <ImportUserDialog />
+              <Button variant="outline" className="w-full" onClick={(e) => {
+                e.stopPropagation();
+                navigate("/manajemen-pengguna");
+              }}>
+                Lihat Semua
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
             </CardContent>
           </Card>
 

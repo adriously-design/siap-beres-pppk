@@ -6,7 +6,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
+import AuthPPPK from "./pages/AuthPPPK";
+import AuthAdmin from "./pages/AuthAdmin";
+import ManajemenPengguna from "./pages/ManajemenPengguna";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -19,12 +21,21 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/pppk" element={<AuthPPPK />} />
+            <Route path="/auth/admin" element={<AuthAdmin />} />
             <Route 
               path="/" 
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manajemen-pengguna" 
+              element={
+                <ProtectedRoute allowedRoles={['admin_bkd']}>
+                  <ManajemenPengguna />
                 </ProtectedRoute>
               } 
             />

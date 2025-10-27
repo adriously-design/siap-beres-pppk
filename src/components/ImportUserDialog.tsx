@@ -1,24 +1,38 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export function ImportUserDialog() {
   const [open, setOpen] = useState(false);
-  const [csvData, setCsvData] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleImport = async () => {
-    if (!csvData.trim()) {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && selectedFile.type === "text/csv") {
+      setFile(selectedFile);
+    } else {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Data tidak boleh kosong",
+        description: "File harus berformat .csv",
+      });
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Silakan pilih file CSV terlebih dahulu",
       });
       return;
     }
@@ -26,8 +40,8 @@ export function ImportUserDialog() {
     setLoading(true);
 
     try {
-      // Parse CSV data
-      const lines = csvData.trim().split('\n');
+      const text = await file.text();
+      const lines = text.trim().split('\n');
       const users = lines.map(line => {
         const [no_peserta, nik, full_name] = line.split(',').map(s => s.trim());
         return { no_peserta, nik, full_name };
@@ -83,7 +97,10 @@ export function ImportUserDialog() {
       });
 
       if (successCount > 0) {
-        setCsvData("");
+        setFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
         setOpen(false);
       }
     } catch (error: any) {
@@ -118,15 +135,20 @@ export function ImportUserDialog() {
         
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="csv-data">Data CSV</Label>
-            <Textarea
-              id="csv-data"
-              placeholder="Contoh:&#10;001,1234567890123456,ANDI WIJAYA&#10;002,9876543210987654,BUDI SANTOSO"
-              value={csvData}
-              onChange={(e) => setCsvData(e.target.value)}
-              rows={10}
-              className="font-mono text-sm"
+            <Label htmlFor="csv-file">Upload File CSV</Label>
+            <Input
+              id="csv-file"
+              type="file"
+              accept=".csv"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              disabled={loading}
             />
+            {file && (
+              <p className="text-sm text-muted-foreground">
+                File terpilih: {file.name}
+              </p>
+            )}
           </div>
 
           <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
@@ -138,6 +160,11 @@ export function ImportUserDialog() {
               <li>Pisahkan dengan koma (,)</li>
             </ul>
             <p className="text-xs text-muted-foreground mt-2">
+              <strong>Contoh:</strong><br/>
+              001,1234567890123456,ANDI WIJAYA<br/>
+              002,9876543210987654,BUDI SANTOSO
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
               <strong>Catatan:</strong> Password otomatis adalah NIK user
             </p>
           </div>
@@ -148,7 +175,14 @@ export function ImportUserDialog() {
               disabled={loading}
               className="flex-1"
             >
-              {loading ? "Mengimport..." : "Import Data"}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Mengimport...
+                </>
+              ) : (
+                "Import Data"
+              )}
             </Button>
             <Button
               onClick={() => setOpen(false)}
