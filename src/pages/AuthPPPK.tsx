@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
 const pppkLoginSchema = z.object({
-  no_peserta: z.string().min(1, "No Peserta harus diisi"),
-  nik: z.string().length(16, "NIK harus 16 digit"),
+  no_peserta: z.string().min(1, "No Peserta harus diisi").max(50, "No Peserta terlalu panjang"),
+  nik: z.string().regex(/^\d{16}$/, "NIK harus 16 digit angka"),
 });
 
 const AuthPPPK = () => {
@@ -33,7 +33,7 @@ const AuthPPPK = () => {
       
       const { error } = await supabase.auth.signInWithPassword({
         email,
-        password: validated.nik,
+        password: formData.nik,
       });
 
       if (error) throw error;
@@ -48,7 +48,7 @@ const AuthPPPK = () => {
       } else {
         toast({
           title: "Login Gagal",
-          description: "No Peserta atau NIK tidak valid",
+          description: "No Peserta atau password tidak valid",
           variant: "destructive",
         });
       }
@@ -79,14 +79,13 @@ const AuthPPPK = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nik">NIK (16 Digit)</Label>
+              <Label htmlFor="nik">Password</Label>
               <Input
                 id="nik"
                 type="password"
-                placeholder="Masukkan NIK"
+                placeholder="Masukkan Password"
                 value={formData.nik}
                 onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
-                maxLength={16}
                 disabled={loading}
               />
             </div>
@@ -102,7 +101,7 @@ const AuthPPPK = () => {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Gunakan No Peserta dan NIK yang telah terdaftar di sistem
+            Gunakan No Peserta dan Password yang diberikan oleh admin
           </p>
         </CardContent>
       </Card>

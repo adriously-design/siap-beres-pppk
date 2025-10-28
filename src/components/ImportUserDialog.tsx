@@ -41,67 +41,91 @@ export function ImportUserDialog() {
 
     try {
       const text = await file.text();
-      const lines = text.trim().split('\n');
-      const users = lines.map(line => {
-        const [no_peserta, nik, full_name] = line.split(',').map(s => s.trim());
-        return { no_peserta, nik, full_name };
-      });
-
-      // Validate data
-      const invalidUsers = users.filter(u => !u.no_peserta || !u.nik || u.nik.length !== 16 || !u.full_name);
-      if (invalidUsers.length > 0) {
-        toast({
-          variant: "destructive",
-          title: "Data tidak valid",
-          description: `${invalidUsers.length} baris data tidak valid. Pastikan format: NO_PESERTA,NIK,NAMA_LENGKAP`,
-        });
-        return;
-      }
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      // Import users one by one
-      for (const user of users) {
-        try {
-          // Create auth user with auto-generated email
-          const email = `${user.no_peserta}@pppk.local`;
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: email,
-            password: user.nik,
-            options: {
-              data: {
-                full_name: user.full_name,
-                nik: user.nik,
-                no_peserta: user.no_peserta,
-              },
-            },
-          });
-
-          if (authError) {
-            console.error(`Error creating user ${user.no_peserta}:`, authError);
-            errorCount++;
-            continue;
-          }
-
-          successCount++;
-        } catch (error) {
-          console.error(`Error importing user ${user.no_peserta}:`, error);
-          errorCount++;
+      const lines = text.trim().split('\n').filter(line => line.trim().length > 0);
+      
+      const users = lines.map((line, index) => {
+        // Remove dangerous CSV formula characters
+        const safeLine = line.replace(/^[=+\-@]/, '');
+        const parts = safeLine.split(',').map(s => s.trim());
+        
+        if (parts.length !== 3) {
+          throw new Error(`Baris ${index + 1}: Format tidak valid`);
         }
-      }
-
-      toast({
-        title: "Import selesai",
-        description: `Berhasil: ${successCount}, Gagal: ${errorCount}`,
+        
+        const [no_peserta, nik, full_name] = parts;
+        
+        // Validate NIK is numeric
+        if (!/^\d{16}$/.test(nik)) {
+          throw new Error(`Baris ${index + 1}: NIK harus 16 digit angka`);
+        }
+        
+        // Sanitize name - remove dangerous characters
+        const sanitizedName = full_name
+          .replace(/[<>"']/g, '')
+          .replace(/[;]/g, '')
+          .trim();
+        
+        if (!no_peserta || !sanitizedName) {
+          throw new Error(`Baris ${index + 1}: Data tidak lengkap`);
+        }
+        
+        return { no_peserta, nik, full_name: sanitizedName };
       });
 
-      if (successCount > 0) {
+      // Call edge function for bulk create with server-side validation
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: { 
+          action: 'bulk_create',
+          userData: users
+        },
+      });
+
+      if (error) throw error;
+
+      const { results, summary } = data;
+      
+      // Show detailed results
+      const passwordList = results
+        .filter((r: any) => r.success)
+        .map((r: any) => `${r.no_peserta}: ${r.password}`)
+        .join('\n');
+
+      if (summary.successCount > 0) {
+        toast({
+          title: "Import selesai",
+          description: `Berhasil: ${summary.successCount}, Gagal: ${summary.errorCount}`,
+        });
+
+        // Show passwords in a downloadable format
+        if (passwordList) {
+          const blob = new Blob([`Password untuk user yang berhasil dibuat:\n\n${passwordList}\n\nHARAP SIMPAN FILE INI DENGAN AMAN!`], 
+            { type: 'text/plain' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `passwords_${new Date().toISOString().split('T')[0]}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          toast({
+            title: "Password berhasil disimpan",
+            description: "File password telah diunduh. Berikan password kepada user yang bersangkutan.",
+          });
+        }
+
         setFile(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
         setOpen(false);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Import gagal",
+          description: "Tidak ada user yang berhasil dibuat. Periksa format file CSV.",
+        });
       }
     } catch (error: any) {
       toast({
@@ -165,7 +189,7 @@ export function ImportUserDialog() {
               002,9876543210987654,BUDI SANTOSO
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              <strong>Catatan:</strong> Password otomatis adalah NIK user
+              <strong>Catatan:</strong> Password akan digenerate secara otomatis dan akan diunduh setelah import berhasil
             </p>
           </div>
 

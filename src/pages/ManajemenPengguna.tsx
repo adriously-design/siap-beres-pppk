@@ -94,36 +94,35 @@ const ManajemenPengguna = () => {
       return;
     }
 
-    if (formData.nik.length !== 16) {
-      toast({
-        title: "Error",
-        description: "NIK harus 16 digit",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      const email = `${formData.no_peserta}@pppk.local`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password: formData.nik,
-        options: {
-          data: {
-            full_name: formData.full_name,
-            nik: formData.nik,
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: { 
+          action: 'create',
+          userData: {
             no_peserta: formData.no_peserta,
-          },
+            nik: formData.nik,
+            full_name: formData.full_name
+          }
         },
       });
 
       if (error) throw error;
 
+      // Show password to admin
       toast({
         title: "Sukses",
-        description: "User berhasil ditambahkan",
+        description: `User berhasil ditambahkan. Password: ${data.password}`,
+        duration: 10000,
       });
+
+      // Also prompt to copy password
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(data.password);
+        toast({
+          title: "Password disalin",
+          description: "Password telah disalin ke clipboard",
+        });
+      }
 
       setFormData({ no_peserta: "", nik: "", full_name: "" });
       setAddDialogOpen(false);
@@ -141,14 +140,17 @@ const ManajemenPengguna = () => {
     if (!selectedUser) return;
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: formData.full_name,
-          nik: formData.nik,
-          no_peserta: formData.no_peserta,
-        })
-        .eq("id", selectedUser.id);
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: { 
+          action: 'update',
+          userId: selectedUser.id,
+          userData: {
+            no_peserta: formData.no_peserta,
+            nik: formData.nik,
+            full_name: formData.full_name
+          }
+        },
+      });
 
       if (error) throw error;
 
@@ -172,7 +174,12 @@ const ManajemenPengguna = () => {
     if (!selectedUser) return;
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(selectedUser.id);
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: { 
+          action: 'delete',
+          userId: selectedUser.id
+        },
+      });
 
       if (error) throw error;
 
