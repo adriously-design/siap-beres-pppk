@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import AuthPPPK from "./pages/AuthPPPK";
 import AuthAdmin from "./pages/AuthAdmin";
 import ManajemenPengguna from "./pages/ManajemenPengguna";
+import UploadDokumen from "./pages/UploadDokumen";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin_bkd']}>
                   <ManajemenPengguna />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/upload-dokumen" 
+              element={
+                <ProtectedRoute allowedRoles={['calon_pppk']}>
+                  <UploadDokumen />
                 </ProtectedRoute>
               } 
             />

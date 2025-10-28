@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, CheckCircle2, Clock, AlertCircle, Upload, BookOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useNavigate } from "react-router-dom";
 
 interface DokumenStats {
   total: number;
@@ -19,6 +20,7 @@ interface DokumenStats {
 
 export default function DashboardPPPK() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DokumenStats>({
     total: 0,
     uploaded: 0,
@@ -190,7 +192,7 @@ export default function DashboardPPPK() {
               </div>
             </CardHeader>
             <CardContent>
-              <Button className="w-full">
+              <Button className="w-full" onClick={() => navigate('/upload-dokumen')}>
                 Kelola Dokumen
               </Button>
             </CardContent>

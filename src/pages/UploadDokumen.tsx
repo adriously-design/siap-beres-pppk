@@ -1,0 +1,303 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { Navbar } from "@/components/Navbar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { FileText, CheckCircle2, Clock, AlertCircle, Upload, Eye, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { UploadDokumenDialog } from "@/components/UploadDokumenDialog";
+import { useToast } from "@/hooks/use-toast";
+
+interface Dokumen {
+  id: string;
+  nama_dokumen: string;
+  deskripsi: string;
+  format_file: string[];
+  max_size_kb: number;
+  is_required: boolean;
+}
+
+interface UserDokumen {
+  id: string;
+  dokumen_id: string;
+  file_name: string;
+  file_path: string;
+  file_size_kb: number;
+  status_verifikasi: string;
+  catatan_admin?: string;
+  uploaded_at: string;
+  verified_at?: string;
+}
+
+export default function UploadDokumen() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [dokumenList, setDokumenList] = useState<Dokumen[]>([]);
+  const [userDokumen, setUserDokumen] = useState<UserDokumen[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDokumen, setSelectedDokumen] = useState<Dokumen | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      // Fetch all required documents
+      const { data: dokumen, error: dokError } = await supabase
+        .from('dokumen')
+        .select('*')
+        .order('nama_dokumen');
+
+      if (dokError) throw dokError;
+
+      // Fetch user's uploaded documents
+      const { data: userDocs, error: userError } = await supabase
+        .from('user_dokumen')
+        .select('*')
+        .eq('user_id', user!.id);
+
+      if (userError) throw userError;
+
+      setDokumenList(dokumen || []);
+      setUserDokumen(userDocs || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data dokumen",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getUserDoc = (dokumenId: string) => {
+    return userDokumen.find(doc => doc.dokumen_id === dokumenId);
+  };
+
+  const getStatusBadge = (status?: string) => {
+    if (!status) {
+      return <Badge variant="outline">Belum Upload</Badge>;
+    }
+
+    switch (status) {
+      case 'verified':
+        return <Badge className="bg-accent text-accent-foreground">Terverifikasi</Badge>;
+      case 'pending':
+        return <Badge className="bg-warning text-warning-foreground">Menunggu Review</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Ditolak</Badge>;
+      default:
+        return <Badge variant="outline">Belum Upload</Badge>;
+    }
+  };
+
+  const handleUpload = (dokumen: Dokumen) => {
+    setSelectedDokumen(dokumen);
+    setDialogOpen(true);
+  };
+
+  const handleUploadSuccess = () => {
+    fetchData();
+    setDialogOpen(false);
+  };
+
+  const handlePreview = async (userDoc: UserDokumen) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('dokumen-pppk')
+        .createSignedUrl(userDoc.file_path, 60);
+
+      if (error) throw error;
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error previewing file:', error);
+      toast({
+        title: "Error",
+        description: "Gagal membuka file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (userDoc: UserDokumen) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus dokumen ini?')) return;
+
+    try {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('dokumen-pppk')
+        .remove([userDoc.file_path]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('user_dokumen')
+        .delete()
+        .eq('id', userDoc.id);
+
+      if (dbError) throw dbError;
+
+      toast({
+        title: "Berhasil",
+        description: "Dokumen berhasil dihapus",
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menghapus dokumen",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Upload Dokumen</h1>
+          <p className="text-muted-foreground">
+            Unggah dan kelola dokumen persyaratan PPPK Anda
+          </p>
+        </div>
+
+        {/* Info Card */}
+        <Card className="mb-6 bg-primary/5 border-primary/20">
+          <CardHeader>
+            <CardTitle className="text-lg">📋 Panduan Upload</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>✅ Pastikan file dalam format yang benar (PDF/JPG sesuai ketentuan)</p>
+            <p>✅ Ukuran file tidak melebihi batas maksimal</p>
+            <p>✅ File dapat dilihat dengan jelas dan tidak buram</p>
+            <p>✅ Dokumen yang ditolak dapat di-upload ulang</p>
+          </CardContent>
+        </Card>
+
+        {/* Documents List */}
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map(i => (
+              <Skeleton key={i} className="h-32 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {dokumenList.map((dokumen) => {
+              const userDoc = getUserDoc(dokumen.id);
+              
+              return (
+                <Card key={dokumen.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <CardTitle className="text-lg">{dokumen.nama_dokumen}</CardTitle>
+                          {dokumen.is_required && (
+                            <Badge variant="outline" className="text-xs">Wajib</Badge>
+                          )}
+                        </div>
+                        <CardDescription>{dokumen.deskripsi}</CardDescription>
+                        
+                        <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+                          <span>Format: {dokumen.format_file.map(f => f.toUpperCase()).join(', ')}</span>
+                          <span>Max: {dokumen.max_size_kb >= 1024 ? `${dokumen.max_size_kb / 1024}MB` : `${dokumen.max_size_kb}KB`}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-2">
+                        {getStatusBadge(userDoc?.status_verifikasi)}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent>
+                    {userDoc && (
+                      <div className="mb-4 p-4 bg-muted rounded-lg">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{userDoc.file_name}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Upload: {new Date(userDoc.uploaded_at).toLocaleDateString('id-ID')}
+                            </p>
+                            {userDoc.verified_at && (
+                              <p className="text-xs text-muted-foreground">
+                                Verifikasi: {new Date(userDoc.verified_at).toLocaleDateString('id-ID')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePreview(userDoc)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Lihat
+                            </Button>
+                            {userDoc.status_verifikasi !== 'verified' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDelete(userDoc)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Hapus
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {userDoc.catatan_admin && (
+                          <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded">
+                            <p className="text-sm font-medium text-destructive mb-1">Catatan Admin:</p>
+                            <p className="text-sm">{userDoc.catatan_admin}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <Button
+                      onClick={() => handleUpload(dokumen)}
+                      disabled={userDoc?.status_verifikasi === 'verified'}
+                      className="w-full"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {userDoc ? 'Upload Ulang' : 'Upload Dokumen'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {selectedDokumen && (
+        <UploadDokumenDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          dokumen={selectedDokumen}
+          onSuccess={handleUploadSuccess}
+        />
+      )}
+    </div>
+  );
+}
