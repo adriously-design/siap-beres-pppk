@@ -10,6 +10,7 @@ import AuthPPPK from "./pages/AuthPPPK";
 import AuthAdmin from "./pages/AuthAdmin";
 import ManajemenPengguna from "./pages/ManajemenPengguna";
 import UploadDokumen from "./pages/UploadDokumen";
+import EBimtek from "./pages/EBimtek";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['calon_pppk']}>
                   <UploadDokumen />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/e-bimtek" 
+              element={
+                <ProtectedRoute allowedRoles={['calon_pppk']}>
+                  <EBimtek />
                 </ProtectedRoute>
               } 
             />
