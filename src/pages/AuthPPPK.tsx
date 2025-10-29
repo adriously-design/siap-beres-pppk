@@ -99,9 +99,18 @@ const AuthPPPK = () => {
                 "Login"
               )}
             </Button>
+            <Button 
+              type="button" 
+              variant="link" 
+              className="w-full text-primary"
+              onClick={() => navigate('/reset-password-pppk')}
+            >
+              Lupa/Reset Password?
+            </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Gunakan No Peserta dan Password yang diberikan oleh admin
+            Gunakan No Peserta dan Password yang diberikan oleh admin.<br/>
+            Jika belum pernah login, silahkan reset password terlebih dahulu.
           </p>
         </CardContent>
       </Card>

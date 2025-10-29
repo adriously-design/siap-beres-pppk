@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileText, X } from "lucide-react";
 
@@ -40,6 +42,7 @@ export function UploadDokumenDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [userNote, setUserNote] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +132,7 @@ export function UploadDokumenDialog({
             status_verifikasi: 'pending',
             uploaded_at: new Date().toISOString(),
             catatan_admin: null,
+            catatan_user: userNote || null,
             verified_at: null,
           })
           .eq('id', existingDoc.id);
@@ -145,6 +149,7 @@ export function UploadDokumenDialog({
             file_path: filePath,
             file_size_kb: Math.round(selectedFile.size / 1024),
             status_verifikasi: 'pending',
+            catatan_user: userNote || null,
           });
 
         if (insertError) throw insertError;
@@ -169,6 +174,7 @@ export function UploadDokumenDialog({
       setUploading(false);
       setUploadProgress(0);
       setSelectedFile(null);
+      setUserNote('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -247,6 +253,19 @@ export function UploadDokumenDialog({
                 </Button>
               </div>
             )}
+          </div>
+
+          {/* User Note */}
+          <div className="space-y-2">
+            <Label htmlFor="user-note">Catatan (Opsional)</Label>
+            <Textarea
+              id="user-note"
+              value={userNote}
+              onChange={(e) => setUserNote(e.target.value)}
+              placeholder="Tambahkan catatan jika ada yang perlu dijelaskan..."
+              className="min-h-[80px]"
+              disabled={uploading}
+            />
           </div>
 
           {/* Upload Progress */}

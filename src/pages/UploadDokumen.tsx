@@ -192,45 +192,45 @@ export default function UploadDokumen() {
 
         {/* Documents List */}
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <Skeleton key={i} className="h-32 w-full" />
+          <div className="grid md:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <Skeleton key={i} className="h-48 w-full" />
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
             {dokumenList.map((dokumen) => {
               const userDoc = getUserDoc(dokumen.id);
               
               return (
                 <Card key={dokumen.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
+                  <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <FileText className="h-5 w-5 text-primary" />
-                          <CardTitle className="text-lg">{dokumen.nama_dokumen}</CardTitle>
+                        <div className="flex items-center gap-2 mb-1">
+                          <FileText className="h-4 w-4 text-primary" />
+                          <CardTitle className="text-base">{dokumen.nama_dokumen}</CardTitle>
                           {dokumen.is_required && (
                             <Badge variant="outline" className="text-xs">Wajib</Badge>
                           )}
                         </div>
-                        <CardDescription>{dokumen.deskripsi}</CardDescription>
+                        <CardDescription className="text-xs line-clamp-2">
+                          {dokumen.deskripsi}
+                        </CardDescription>
                         
-                        <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
                           <span>Format: {dokumen.format_file.map(f => f.toUpperCase()).join(', ')}</span>
                           <span>Max: {dokumen.max_size_kb >= 1024 ? `${dokumen.max_size_kb / 1024}MB` : `${dokumen.max_size_kb}KB`}</span>
                         </div>
                       </div>
                       
-                      <div className="flex flex-col items-end gap-2">
-                        {getStatusBadge(userDoc?.status_verifikasi)}
-                      </div>
+                      <div className="flex flex-col items-end gap-1 ml-2">{getStatusBadge(userDoc?.status_verifikasi)}</div>
                     </div>
                   </CardHeader>
                   
-                  <CardContent>
+                  <CardContent className="pt-3">
                     {userDoc && (
-                      <div className="mb-4 p-4 bg-muted rounded-lg">
+                      <div className="mb-3 p-3 bg-muted rounded-lg">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <p className="text-sm font-medium">{userDoc.file_name}</p>
@@ -249,8 +249,7 @@ export default function UploadDokumen() {
                               variant="outline"
                               onClick={() => handlePreview(userDoc)}
                             >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Lihat
+                              <Eye className="h-4 w-4" />
                             </Button>
                             {userDoc.status_verifikasi !== 'verified' && (
                               <Button
@@ -258,17 +257,16 @@ export default function UploadDokumen() {
                                 variant="outline"
                                 onClick={() => handleDelete(userDoc)}
                               >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Hapus
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
                         </div>
                         
                         {userDoc.catatan_admin && (
-                          <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded">
-                            <p className="text-sm font-medium text-destructive mb-1">Catatan Admin:</p>
-                            <p className="text-sm">{userDoc.catatan_admin}</p>
+                          <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded">
+                            <p className="text-xs font-medium text-destructive mb-1">Catatan Admin:</p>
+                            <p className="text-xs">{userDoc.catatan_admin}</p>
                           </div>
                         )}
                       </div>
