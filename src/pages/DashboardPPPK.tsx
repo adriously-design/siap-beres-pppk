@@ -213,7 +213,7 @@ export default function DashboardPPPK() {
               </div>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => navigate('/e-bimtek')}>
                 Lihat Panduan
               </Button>
             </CardContent>
