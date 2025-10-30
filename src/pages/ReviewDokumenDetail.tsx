@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, FileText, CheckCircle2, XCircle, Eye } from "lucide-react";
+import { MessageHistoryDialog } from "@/components/MessageHistoryDialog";
+import { ArrowLeft, FileText, CheckCircle2, XCircle, Eye, MessageSquare } from "lucide-react";
 
 interface UserProfile {
   full_name: string;
@@ -30,6 +31,7 @@ interface UserDokumenItem {
   status_verifikasi: string;
   catatan_admin: string | null;
   catatan_user: string | null;
+  catatan_history: any[];
   uploaded_at: string;
   dokumen: DokumenItem;
 }
@@ -43,6 +45,8 @@ export default function ReviewDokumenDetail() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [selectedHistory, setSelectedHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (userId) {
@@ -72,6 +76,7 @@ export default function ReviewDokumenDetail() {
           status_verifikasi,
           catatan_admin,
           catatan_user,
+          catatan_history,
           uploaded_at,
           dokumen:dokumen_id (
             id,
@@ -125,11 +130,27 @@ export default function ReviewDokumenDetail() {
   const handleUpdateStatus = async (docId: string, status: 'verified' | 'rejected') => {
     setUpdating(docId);
     try {
+      const currentDoc = documents.find(d => d.id === docId);
+      const currentHistory = currentDoc?.catatan_history || [];
+      
+      // Add new message to history if there's an admin note
+      const newHistory = adminNotes[docId]?.trim() 
+        ? [
+            ...currentHistory,
+            {
+              type: 'admin',
+              message: adminNotes[docId],
+              timestamp: new Date().toISOString()
+            }
+          ]
+        : currentHistory;
+
       const { error } = await supabase
         .from('user_dokumen')
         .update({
           status_verifikasi: status,
           catatan_admin: adminNotes[docId] || null,
+          catatan_history: newHistory,
           verified_at: status === 'verified' ? new Date().toISOString() : null,
         })
         .eq('id', docId);
@@ -152,6 +173,11 @@ export default function ReviewDokumenDetail() {
     } finally {
       setUpdating(null);
     }
+  };
+
+  const handleViewHistory = (history: any[]) => {
+    setSelectedHistory(history || []);
+    setHistoryDialogOpen(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -185,19 +211,20 @@ export default function ReviewDokumenDetail() {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 max-w-5xl">
         <Button
           variant="ghost"
           onClick={() => navigate('/review-dokumen')}
           className="mb-4"
+          size="sm"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Kembali ke Daftar PPPK
+          Kembali
         </Button>
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Review Dokumen</h1>
-          <p className="text-lg text-muted-foreground">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">Review Dokumen</h1>
+          <p className="text-sm text-muted-foreground">
             {profile?.full_name} - No Peserta: {profile?.no_peserta}
           </p>
         </div>
@@ -210,44 +237,47 @@ export default function ReviewDokumenDetail() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {documents.map((doc) => (
               <Card key={doc.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <CardTitle className="text-xl mb-1">
-                        {doc.dokumen.nama_dokumen}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {doc.dokumen.deskripsi}
-                      </p>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CardTitle className="text-lg">{doc.dokumen.nama_dokumen}</CardTitle>
                         {getStatusBadge(doc.status_verifikasi)}
-                        <span className="text-xs text-muted-foreground">
-                          Upload: {new Date(doc.uploaded_at).toLocaleDateString('id-ID')}
-                        </span>
                       </div>
-                      <p className="text-sm font-medium">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground mb-2">{doc.dokumen.deskripsi}</p>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Upload: {new Date(doc.uploaded_at).toLocaleDateString('id-ID')} • {doc.file_name}
+                      </p>
                     </div>
+                    {doc.catatan_history && doc.catatan_history.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewHistory(doc.catatan_history)}
+                      >
+                        <MessageSquare className="h-4 w-4 mr-1" />
+                        <span className="text-xs">Riwayat ({doc.catatan_history.length})</span>
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Catatan User */}
+                <CardContent className="space-y-3">
                   {doc.catatan_user && (
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                      <Label className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                      <Label className="text-xs font-medium text-blue-900 dark:text-blue-100">
                         Catatan dari PPPK:
                       </Label>
-                      <p className="text-sm mt-1 text-blue-800 dark:text-blue-200">
+                      <p className="text-xs mt-1 text-blue-800 dark:text-blue-200">
                         {doc.catatan_user}
                       </p>
                     </div>
                   )}
 
-                  {/* Admin Notes */}
-                  <div className="space-y-2">
-                    <Label htmlFor={`notes-${doc.id}`}>Catatan Admin (Feedback)</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`notes-${doc.id}`} className="text-sm">Catatan Admin</Label>
                     <Textarea
                       id={`notes-${doc.id}`}
                       value={adminNotes[doc.id] || ''}
@@ -255,38 +285,40 @@ export default function ReviewDokumenDetail() {
                         ...prev,
                         [doc.id]: e.target.value
                       }))}
-                      placeholder="Tambahkan catatan atau feedback untuk dokumen ini..."
-                      className="min-h-[100px]"
+                      placeholder="Tambahkan catatan atau feedback..."
+                      className="min-h-[80px] text-sm"
                       disabled={updating === doc.id}
                     />
                   </div>
 
-                  {/* Action Buttons */}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       onClick={() => handlePreview(doc.file_path)}
+                      size="sm"
                       className="flex-1"
                     >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Lihat File
+                      <Eye className="h-3.5 w-3.5 mr-1" />
+                      Lihat
                     </Button>
                     <Button
                       onClick={() => handleUpdateStatus(doc.id, 'verified')}
                       disabled={updating === doc.id || doc.status_verifikasi === 'verified'}
+                      size="sm"
                       className="flex-1 bg-green-600 hover:bg-green-700"
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      {updating === doc.id ? 'Memproses...' : 'Verifikasi'}
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                      {updating === doc.id ? 'Proses...' : 'Verifikasi'}
                     </Button>
                     <Button
                       onClick={() => handleUpdateStatus(doc.id, 'rejected')}
                       disabled={updating === doc.id || doc.status_verifikasi === 'rejected'}
                       variant="destructive"
+                      size="sm"
                       className="flex-1"
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      {updating === doc.id ? 'Memproses...' : 'Tolak'}
+                      <XCircle className="h-3.5 w-3.5 mr-1" />
+                      {updating === doc.id ? 'Proses...' : 'Tolak'}
                     </Button>
                   </div>
                 </CardContent>
@@ -295,6 +327,13 @@ export default function ReviewDokumenDetail() {
           </div>
         )}
       </main>
+      
+      <MessageHistoryDialog
+        open={historyDialogOpen}
+        onOpenChange={setHistoryDialogOpen}
+        history={selectedHistory}
+        userName={profile?.full_name || ''}
+      />
     </div>
   );
 }

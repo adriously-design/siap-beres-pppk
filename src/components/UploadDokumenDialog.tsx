@@ -117,6 +117,27 @@ export function UploadDokumenDialog({
       setUploadProgress(75);
 
       if (existingDoc) {
+        // Get existing history
+        const { data: docData } = await supabase
+          .from('user_dokumen')
+          .select('catatan_history')
+          .eq('id', existingDoc.id)
+          .single();
+
+        const existingHistory = Array.isArray(docData?.catatan_history) ? docData.catatan_history : [];
+        
+        // Add new note to history if provided
+        const newHistory = userNote.trim() 
+          ? [
+              ...existingHistory,
+              {
+                type: 'user',
+                message: userNote,
+                timestamp: new Date().toISOString()
+              }
+            ]
+          : existingHistory;
+
         // Delete old file from storage
         await supabase.storage
           .from('dokumen-pppk')
@@ -133,12 +154,20 @@ export function UploadDokumenDialog({
             uploaded_at: new Date().toISOString(),
             catatan_admin: null,
             catatan_user: userNote || null,
+            catatan_history: newHistory,
             verified_at: null,
           })
           .eq('id', existingDoc.id);
 
         if (updateError) throw updateError;
       } else {
+        // Prepare history entry for new document
+        const historyEntry = userNote.trim() ? [{
+          type: 'user',
+          message: userNote,
+          timestamp: new Date().toISOString()
+        }] : [];
+
         // Insert new record
         const { error: insertError } = await supabase
           .from('user_dokumen')
@@ -150,6 +179,7 @@ export function UploadDokumenDialog({
             file_size_kb: Math.round(selectedFile.size / 1024),
             status_verifikasi: 'pending',
             catatan_user: userNote || null,
+            catatan_history: historyEntry,
           });
 
         if (insertError) throw insertError;

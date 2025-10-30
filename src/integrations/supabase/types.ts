@@ -207,6 +207,7 @@ export type Database = {
       user_dokumen: {
         Row: {
           catatan_admin: string | null
+          catatan_history: Json | null
           catatan_user: string | null
           dokumen_id: string
           file_name: string
@@ -220,6 +221,7 @@ export type Database = {
         }
         Insert: {
           catatan_admin?: string | null
+          catatan_history?: Json | null
           catatan_user?: string | null
           dokumen_id: string
           file_name: string
@@ -233,6 +235,7 @@ export type Database = {
         }
         Update: {
           catatan_admin?: string | null
+          catatan_history?: Json | null
           catatan_user?: string | null
           dokumen_id?: string
           file_name?: string
