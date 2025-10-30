@@ -11,7 +11,7 @@ import { Loader2 } from "lucide-react";
 
 const pppkLoginSchema = z.object({
   no_peserta: z.string().min(1, "No Peserta harus diisi").max(50, "No Peserta terlalu panjang"),
-  nik: z.string().regex(/^\d{16}$/, "NIK harus 16 digit angka"),
+  password: z.string().min(1, "Password harus diisi"),
 });
 
 const AuthPPPK = () => {
@@ -20,7 +20,7 @@ const AuthPPPK = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     no_peserta: "",
-    nik: "",
+    password: "",
   });
 
   const handlePPPKLogin = async (e: React.FormEvent) => {
@@ -33,7 +33,7 @@ const AuthPPPK = () => {
       
       const { error } = await supabase.auth.signInWithPassword({
         email,
-        password: formData.nik,
+        password: formData.password,
       });
 
       if (error) throw error;
@@ -79,13 +79,13 @@ const AuthPPPK = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nik">Password</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
-                id="nik"
+                id="password"
                 type="password"
                 placeholder="Masukkan Password"
-                value={formData.nik}
-                onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 disabled={loading}
               />
             </div>
