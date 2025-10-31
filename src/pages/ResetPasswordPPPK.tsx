@@ -47,25 +47,29 @@ const ResetPasswordPPPK = () => {
     try {
       const validated = verifySchema.parse(verifyData);
       
-      // Verify via edge function (will check both no_peserta and nik)
-      const { data, error } = await supabase.functions.invoke('reset-password', {
-        body: {
-          no_peserta: validated.no_peserta,
-          nik: validated.nik,
-          new_password: 'verify-only', // Dummy password for verification
-        }
-      });
+      // Verify by checking if profile exists in database
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('no_peserta, nik, status_aktivasi')
+        .eq('no_peserta', validated.no_peserta)
+        .eq('nik', validated.nik)
+        .maybeSingle();
 
-      // If we get 404, it means user not found or credentials don't match
-      if (error && error.message.includes('No Peserta atau NIK tidak sesuai')) {
+      if (error) {
+        throw new Error('Terjadi kesalahan sistem');
+      }
+
+      if (!profile) {
         throw new Error('No Peserta atau NIK tidak sesuai');
       }
 
-      // If we reach here, verification successful
+      // Verification successful
       setStep('reset');
       toast({
         title: "Verifikasi Berhasil",
-        description: "Silahkan masukkan password baru Anda",
+        description: profile.status_aktivasi 
+          ? "Silahkan masukkan password baru Anda"
+          : "Silahkan buat password untuk aktivasi akun Anda",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

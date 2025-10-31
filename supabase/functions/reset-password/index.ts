@@ -62,10 +62,18 @@ const handler = async (req: Request): Promise<Response> => {
       .select('id, no_peserta, nik, full_name, status_aktivasi, jabatan, phone')
       .eq('no_peserta', no_peserta)
       .eq('nik', nik)
-      .single();
+      .maybeSingle();
 
-    if (profileError || !profile) {
-      console.log('Profile not found or error:', profileError);
+    if (profileError) {
+      console.log('Profile query error:', profileError);
+      return new Response(
+        JSON.stringify({ error: 'Terjadi kesalahan sistem' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!profile) {
+      console.log('Profile not found for no_peserta:', no_peserta);
       return new Response(
         JSON.stringify({ error: 'No Peserta atau NIK tidak sesuai' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -101,6 +109,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // First time activation - create auth user
+    // The trigger handle_new_user will automatically update the existing profile
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: `${no_peserta}@pppk.bkd.ntt.go.id`,
       password: new_password,
@@ -117,52 +126,6 @@ const handler = async (req: Request): Promise<Response> => {
       console.error('Error creating user:', createError);
       return new Response(
         JSON.stringify({ error: 'Gagal membuat akun. ' + createError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Delete old profile and insert new one with auth user ID
-    // First, save the old profile data
-    const oldProfileData = {
-      full_name: profile.full_name,
-      no_peserta: profile.no_peserta,
-      nik: profile.nik,
-      jabatan: profile.jabatan,
-      phone: profile.phone
-    };
-
-    // Delete old profile entry
-    const { error: deleteError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('no_peserta', no_peserta)
-      .eq('nik', nik);
-
-    if (deleteError) {
-      console.error('Error deleting old profile:', deleteError);
-      // Rollback - delete created user
-      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-      return new Response(
-        JSON.stringify({ error: 'Gagal mengaktifkan akun (delete)' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Insert new profile with auth user ID
-    const { error: insertProfileError } = await supabaseAdmin
-      .from('profiles')
-      .insert({ 
-        id: newUser.user.id,
-        ...oldProfileData,
-        status_aktivasi: true
-      });
-
-    if (insertProfileError) {
-      console.error('Error inserting new profile:', insertProfileError);
-      // Rollback - delete created user
-      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-      return new Response(
-        JSON.stringify({ error: 'Gagal mengaktifkan akun (insert)' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
