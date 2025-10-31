@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
 import AuthPPPK from "./pages/AuthPPPK";
 import AuthAdmin from "./pages/AuthAdmin";
 import ResetPasswordPPPK from "./pages/ResetPasswordPPPK";
@@ -30,11 +29,8 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/auth/pppk" element={<AuthPPPK />} />
             <Route path="/auth-pppk" element={<AuthPPPK />} />
             <Route path="/reset-password-pppk" element={<ResetPasswordPPPK />} />
-            <Route path="/auth/admin" element={<AuthAdmin />} />
             <Route path="/auth-admin" element={<AuthAdmin />} />
             <Route 
               path="/dashboard-pppk" 

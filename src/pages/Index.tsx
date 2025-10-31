@@ -23,11 +23,11 @@ const Index = () => {
               </div>
             </div>
             <Button 
-              onClick={() => navigate('/auth/pppk')}
+              onClick={() => navigate('/auth-pppk')}
               variant="secondary"
               size="lg"
             >
-              Login
+              Login PPPK
             </Button>
           </div>
         </div>
@@ -47,18 +47,10 @@ const Index = () => {
               <div className="flex gap-4">
                 <Button 
                   size="lg" 
-                  onClick={() => navigate('/auth/pppk')}
+                  onClick={() => navigate('/auth-pppk')}
                   className="text-lg px-8"
                 >
                   Login Calon PPPK
-                </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline"
-                  onClick={() => navigate('/auth/admin')}
-                  className="text-lg px-8"
-                >
-                  Login Admin
                 </Button>
               </div>
             </div>

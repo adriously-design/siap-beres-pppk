@@ -110,15 +110,44 @@ const ResetPasswordPPPK = () => {
 
       if (error) throw error;
 
+      if (data.error) {
+        toast({
+          variant: "destructive",
+          title: "Gagal",
+          description: data.error,
+        });
+        return;
+      }
+
       toast({
         title: "Berhasil",
-        description: data.message || "Password berhasil diubah. Silahkan login dengan password baru.",
+        description: data.message,
       });
 
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        navigate('/auth-pppk');
-      }, 2000);
+      // If first time activation, auto login
+      if (!data.user_exists && data.no_peserta) {
+        // Sign in with the new credentials
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: `${data.no_peserta}@pppk.bkd.ntt.go.id`,
+          password: validated.new_password,
+        });
+
+        if (signInError) {
+          console.error('Auto login error:', signInError);
+          // Redirect to login page if auto login fails
+          setTimeout(() => {
+            navigate('/auth-pppk');
+          }, 2000);
+        } else {
+          // Auto login successful, redirect to dashboard
+          navigate('/dashboard-pppk');
+        }
+      } else {
+        // Password reset for existing user, redirect to login
+        setTimeout(() => {
+          navigate('/auth-pppk');
+        }, 2000);
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({

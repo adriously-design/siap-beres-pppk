@@ -29,7 +29,7 @@ const AuthPPPK = () => {
 
     try {
       const validated = pppkLoginSchema.parse(formData);
-      const email = `${validated.no_peserta}@pppk.local`;
+      const email = `${validated.no_peserta}@pppk.bkd.ntt.go.id`;
       
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -37,7 +37,7 @@ const AuthPPPK = () => {
       });
 
       if (error) throw error;
-      navigate("/");
+      navigate("/dashboard-pppk");
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({

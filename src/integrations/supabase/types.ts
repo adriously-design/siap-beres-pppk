@@ -180,6 +180,7 @@ export type Database = {
           nik: string | null
           no_peserta: string | null
           phone: string | null
+          status_aktivasi: boolean
           updated_at: string
         }
         Insert: {
@@ -190,6 +191,7 @@ export type Database = {
           nik?: string | null
           no_peserta?: string | null
           phone?: string | null
+          status_aktivasi?: boolean
           updated_at?: string
         }
         Update: {
@@ -200,6 +202,7 @@ export type Database = {
           nik?: string | null
           no_peserta?: string | null
           phone?: string | null
+          status_aktivasi?: boolean
           updated_at?: string
         }
         Relationships: []

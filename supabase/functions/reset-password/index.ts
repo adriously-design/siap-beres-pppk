@@ -59,7 +59,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Check if user exists with matching no_peserta AND nik
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, no_peserta, nik')
+      .select('id, no_peserta, nik, full_name, status_aktivasi')
       .eq('no_peserta', no_peserta)
       .eq('nik', nik)
       .single();
@@ -72,26 +72,83 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Update user password
-    const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      profile.id,
-      { password: new_password }
-    );
+    // Check if user already activated
+    if (profile.status_aktivasi) {
+      // User already has account, just update password
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        profile.id,
+        { password: new_password }
+      );
 
-    if (updateError) {
-      console.error('Error updating password:', updateError);
+      if (updateError) {
+        console.error('Error updating password:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Gagal mengubah password' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('Password updated for existing user:', profile.id);
+      
       return new Response(
-        JSON.stringify({ error: 'Gagal mengubah password' }),
+        JSON.stringify({ 
+          success: true, 
+          message: 'Password berhasil diubah. Silahkan login dengan password baru.',
+          user_exists: true
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // First time activation - create auth user
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: `${no_peserta}@pppk.bkd.ntt.go.id`,
+      password: new_password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: profile.full_name,
+        no_peserta: profile.no_peserta,
+        nik: profile.nik,
+        role: 'calon_pppk'
+      }
+    });
+
+    if (createError) {
+      console.error('Error creating user:', createError);
+      return new Response(
+        JSON.stringify({ error: 'Gagal membuat akun. ' + createError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Password reset successful for user:', profile.id);
+    // Update profile with new user id and activate status
+    const { error: updateProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ 
+        id: newUser.user.id,
+        status_aktivasi: true 
+      })
+      .eq('no_peserta', no_peserta)
+      .eq('nik', nik);
+
+    if (updateProfileError) {
+      console.error('Error updating profile:', updateProfileError);
+      // Rollback - delete created user
+      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+      return new Response(
+        JSON.stringify({ error: 'Gagal mengaktifkan akun' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('First time activation successful for user:', newUser.user.id);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Password berhasil diubah. Silahkan login dengan password baru.' 
+        message: 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.',
+        user_exists: false,
+        no_peserta: profile.no_peserta
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
