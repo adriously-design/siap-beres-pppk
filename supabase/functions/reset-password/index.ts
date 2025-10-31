@@ -59,7 +59,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Check if user exists with matching no_peserta AND nik
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, no_peserta, nik, full_name, status_aktivasi')
+      .select('id, no_peserta, nik, full_name, status_aktivasi, jabatan, phone')
       .eq('no_peserta', no_peserta)
       .eq('nik', nik)
       .single();
@@ -121,22 +121,48 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Update profile with new user id and activate status
-    const { error: updateProfileError } = await supabaseAdmin
+    // Delete old profile and insert new one with auth user ID
+    // First, save the old profile data
+    const oldProfileData = {
+      full_name: profile.full_name,
+      no_peserta: profile.no_peserta,
+      nik: profile.nik,
+      jabatan: profile.jabatan,
+      phone: profile.phone
+    };
+
+    // Delete old profile entry
+    const { error: deleteError } = await supabaseAdmin
       .from('profiles')
-      .update({ 
-        id: newUser.user.id,
-        status_aktivasi: true 
-      })
+      .delete()
       .eq('no_peserta', no_peserta)
       .eq('nik', nik);
 
-    if (updateProfileError) {
-      console.error('Error updating profile:', updateProfileError);
+    if (deleteError) {
+      console.error('Error deleting old profile:', deleteError);
       // Rollback - delete created user
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
       return new Response(
-        JSON.stringify({ error: 'Gagal mengaktifkan akun' }),
+        JSON.stringify({ error: 'Gagal mengaktifkan akun (delete)' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Insert new profile with auth user ID
+    const { error: insertProfileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({ 
+        id: newUser.user.id,
+        ...oldProfileData,
+        status_aktivasi: true
+      });
+
+    if (insertProfileError) {
+      console.error('Error inserting new profile:', insertProfileError);
+      // Rollback - delete created user
+      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+      return new Response(
+        JSON.stringify({ error: 'Gagal mengaktifkan akun (insert)' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
