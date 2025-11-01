@@ -31,13 +31,31 @@ const AuthPPPK = () => {
       const validated = pppkLoginSchema.parse(formData);
       const email = `${validated.no_peserta}@pppk.bkd.ntt.go.id`;
       
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password: formData.password,
       });
 
       if (error) throw error;
-      navigate("/dashboard-pppk");
+
+      // Fetch user role to determine redirect
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .single();
+
+      // Redirect based on role
+      if (roleData?.role === 'admin_bkd') {
+        navigate("/dashboard-admin");
+      } else {
+        navigate("/dashboard-pppk");
+      }
+
+      toast({
+        title: "Login Berhasil",
+        description: "Selamat datang di SIAP BERES",
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({

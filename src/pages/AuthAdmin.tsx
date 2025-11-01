@@ -30,13 +30,31 @@ const AuthAdmin = () => {
     try {
       const validated = adminLoginSchema.parse(formData);
       
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: validated.email,
         password: validated.password,
       });
 
       if (error) throw error;
-      navigate("/");
+
+      // Fetch user role to determine redirect
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .single();
+
+      // Redirect based on role
+      if (roleData?.role === 'admin_bkd') {
+        navigate("/dashboard-admin");
+      } else {
+        navigate("/dashboard-pppk");
+      }
+
+      toast({
+        title: "Login Berhasil",
+        description: "Selamat datang di SIAP BERES",
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({

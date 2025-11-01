@@ -57,12 +57,11 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
     // Check if user exists with matching no_peserta AND nik
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, no_peserta, nik, full_name, status_aktivasi, jabatan, phone')
       .eq('no_peserta', no_peserta)
-      .eq('nik', nik)
-      .maybeSingle();
+      .eq('nik', nik);
 
     if (profileError) {
       console.log('Profile query error:', profileError);
@@ -72,13 +71,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    if (!profile) {
-      console.log('Profile not found for no_peserta:', no_peserta);
+    if (!profiles || profiles.length === 0) {
+      console.log('Profile not found for no_peserta:', no_peserta, 'nik:', nik);
       return new Response(
         JSON.stringify({ error: 'No Peserta atau NIK tidak sesuai' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const profile = profiles[0];
 
     // Check if user already activated
     if (profile.status_aktivasi) {
@@ -102,7 +103,7 @@ const handler = async (req: Request): Promise<Response> => {
         JSON.stringify({ 
           success: true, 
           message: 'Password berhasil diubah. Silahkan login dengan password baru.',
-          user_exists: true
+          activated: true
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -136,8 +137,7 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ 
         success: true, 
         message: 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.',
-        user_exists: false,
-        no_peserta: profile.no_peserta
+        activated: false
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
