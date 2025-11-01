@@ -60,10 +60,10 @@ const NotFound = () => {
         <Button
           variant="default"
           size="lg"
-          onClick={() => (window.location.href = "/")}
+          onClick={() => (window.history.length > 1 ? window.history.back() : window.location.href = "/")}
           className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 hover:scale-105"
         >
-          Kembali ke Beranda
+          Kembali ke Halaman Sebelumnya
         </Button>
       </motion.div>
 

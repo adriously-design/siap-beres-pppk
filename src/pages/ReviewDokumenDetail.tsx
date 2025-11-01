@@ -214,7 +214,7 @@ export default function ReviewDokumenDetail() {
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         <Button
           variant="ghost"
-          onClick={() => navigate('/review-dokumen')}
+          onClick={() => navigate(-1)}
           className="mb-4"
           size="sm"
         >
