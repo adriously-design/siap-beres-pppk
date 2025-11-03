@@ -1,3 +1,4 @@
+// GANTI SELURUH ISI file: functions/reset-password/index.ts
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
@@ -20,23 +21,19 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { no_peserta, nik, new_password }: ResetPasswordRequest = await req.json();
 
-    // Validate input
+    // Validasi input dasar
     if (!no_peserta || !nik || !new_password) {
       return new Response(
         JSON.stringify({ error: 'No Peserta, NIK, dan password baru harus diisi' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Validate NIK format (16 digits)
     if (!/^\d{16}$/.test(nik)) {
       return new Response(
         JSON.stringify({ error: 'NIK harus 16 digit angka' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Validate password strength
     if (new_password.length < 8) {
       return new Response(
         JSON.stringify({ error: 'Password minimal 8 karakter' }),
@@ -44,35 +41,22 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Create Supabase admin client
+    // Buat admin client
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+      { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Check if user exists with matching no_peserta AND nik
+    // 1. Cari profil di tabel 'profiles'
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, no_peserta, nik, full_name, status_aktivasi, jabatan, phone')
+      .select('id, no_peserta, nik, full_name, status_aktivasi')
       .eq('no_peserta', no_peserta)
       .eq('nik', nik);
 
-    if (profileError) {
-      console.log('Profile query error:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'Terjadi kesalahan sistem' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    if (profileError) throw profileError;
     if (!profiles || profiles.length === 0) {
-      console.log('Profile not found for no_peserta:', no_peserta, 'nik:', nik);
       return new Response(
         JSON.stringify({ error: 'No Peserta atau NIK tidak sesuai' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -81,63 +65,93 @@ const handler = async (req: Request): Promise<Response> => {
 
     const profile = profiles[0];
 
-    // --- PERBAIKAN LOGIKA DIMULAI DI SINI ---
+    // --- INI LOGIKA YANG DIPERBAIKI ---
 
-    // Baik itu aktivasi pertama kali atau reset, pengguna auth diasumsikan sudah ada
-    // (berdasarkan 'profile.id' yang seharusnya merupakan ID pengguna auth).
-    // Kita hanya perlu update password mereka.
-    
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      profile.id,
-      { password: new_password }
-    );
-
-    if (updateError) {
-      console.error('Error updating password (reset/activation):', updateError);
-      return new Response(
-        JSON.stringify({ error: `Gagal mengubah password: ${updateError.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    if (profile.status_aktivasi) {
+      // KASUS 1: AKUN SUDAH AKTIF (Hanya reset password)
+      // Kita asumsikan profile.id adalah auth.user.id yang valid
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        profile.id,
+        { password: new_password }
       );
-    }
 
-    // Tentukan pesan balasan SEBELUM kita update status
-    const wasActivated = profile.status_aktivasi;
-    const message = wasActivated
-      ? 'Password berhasil diubah. Silahkan login dengan password baru.'
-      : 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.';
+      if (updateError) {
+        console.error('Error updating password (user aktif):', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Gagal mengubah password. ' + updateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    // Jika ini adalah aktivasi pertama kali (status_aktivasi false),
-    // update status di tabel profiles SEKARANG.
-    if (!wasActivated) {
+      console.log('Password updated for existing user:', profile.id);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Password berhasil diubah. Silahkan login dengan password baru.',
+          activated: true // Tidak ada aktivasi baru
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else {
+      // KASUS 2: AKTIVASI PERTAMA KALI (Akun belum aktif)
+      // Buat pengguna baru di auth.users
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: `${no_peserta}@pppk.bkd.ntt.go.id`, // Email unik
+        password: new_password,
+        email_confirm: true, // Langsung aktifkan email
+        user_metadata: {
+          full_name: profile.full_name,
+          no_peserta: profile.no_peserta,
+          nik: profile.nik,
+          role: 'calon_pppk'
+        }
+      });
+
+      if (createError) {
+        console.error('Error creating user (aktivasi):', createError);
+        return new Response(
+          JSON.stringify({ error: 'Gagal membuat akun. ' + createError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // PENTING: Update tabel 'profiles' secara manual
+      // Sinkronkan ID dan set status_aktivasi = true
       const { error: profileUpdateError } = await supabaseAdmin
         .from('profiles')
-        .update({ status_aktivasi: true })
-        .eq('id', profile.id); // Update profil yang sesuai
+        .update({
+          id: newUser.user.id, // Sinkronkan ID profil dengan ID auth
+          status_aktivasi: true
+        })
+        .eq('no_peserta', no_peserta); // Cari berdasarkan no_peserta
 
       if (profileUpdateError) {
-        console.error('Password updated, but failed to set status_aktivasi:', profileUpdateError);
-        // Ini tidak fatal, user bisa login, tapi statusnya masih false
-        // Kita tetap kirim sukses tapi catat errornya di log server
+        console.error('User auth dibuat, TAPI GAGAL update profil:', profileUpdateError);
+        // Jika ini gagal, user auth tetap dibuat, tapi status aktivasi di profil masih false
+        // Ini adalah error kritis yang perlu ditangani, tapi kita tetap beri tahu user
+        return new Response(
+          JSON.stringify({ error: 'Gagal sinkronisasi profil, hubungi admin. ' + profileUpdateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
+
+      console.log('First time activation successful for user:', newUser.user.id);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.',
+          activated: false // Ini adalah proses aktivasi (wasActivated = false)
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-
-    console.log(`Password updated/activated for user: ${profile.id}`);
-        
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: message,
-        activated: !wasActivated // Kirim true jika INI adalah proses aktivasi
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
-    // --- PERBAIKAN LOGIKA SELESAI ---
+    // --- AKHIR LOGIKA PERBAIKAN ---
 
   } catch (error) {
     console.error('Error in reset-password function:', error);
     return new Response(
-      JSON.stringify({ error: 'Terjadi kesalahan server' }),
+      JSON.stringify({ error: 'Terjadi kesalahan server: ' + error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
