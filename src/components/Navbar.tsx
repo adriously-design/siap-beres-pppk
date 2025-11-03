@@ -46,7 +46,7 @@ export const Navbar = () => {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Akun Saya</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/')}>
+              <DropdownMenuItem onClick={() => navigate(userRole === 'admin_bkd' ? '/dashboard-admin' : '/dashboard-pppk')}>
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Dashboard
               </DropdownMenuItem>

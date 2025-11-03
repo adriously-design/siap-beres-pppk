@@ -151,7 +151,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error) {
     console.error('Error in reset-password function:', error);
     return new Response(
-      JSON.stringify({ error: 'Terjadi kesalahan server: ' + error.message }),
+      JSON.stringify({ error: 'Terjadi kesalahan server: ' + (error instanceof Error ? error.message : 'Unknown error') }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -1,7 +1,9 @@
 import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, IdCard, Image, GraduationCap, Stethoscope } from "lucide-react";
+import { FileText, IdCard, Image, GraduationCap, Stethoscope, ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 const documents = [
   {
@@ -32,10 +34,20 @@ const documents = [
 ];
 
 const DocumentCardsPage: React.FC = () => {
+  const navigate = useNavigate();
+  
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="min-h-screen bg-gray-50 p-8">
+        <Button
+          variant="ghost"
+          onClick={() => navigate(-1)}
+          className="mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Kembali
+        </Button>
         <h1 className="text-3xl font-bold text-center mb-10">Daftar Dokumen</h1>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
           {documents.map((doc) => (

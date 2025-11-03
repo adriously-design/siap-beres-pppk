@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Mail, Phone, Youtube, Instagram } from "lucide-react";
 import heroImage from "@/assets/hero-recruitment.jpg";
+import logoNTT from "@/assets/logo-ntt.png";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -14,9 +15,11 @@ const Index = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary-foreground rounded-full flex items-center justify-center">
-                <span className="text-primary font-bold text-xl">BKD</span>
-              </div>
+              <img 
+                src={logoNTT} 
+                alt="Logo Provinsi NTT" 
+                className="w-12 h-12 object-contain"
+              />
               <div>
                 <h1 className="font-bold text-lg">SIAP BERES</h1>
                 <p className="text-xs opacity-90">Sistem Informasi Administrasi PPPK Berbasis Digital</p>

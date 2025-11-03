@@ -5,7 +5,8 @@ import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, CheckCircle2, Clock, AlertCircle, Upload, Eye, Trash2 } from "lucide-react";
+import { FileText, CheckCircle2, Clock, AlertCircle, Upload, Eye, Trash2, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UploadDokumenDialog } from "@/components/UploadDokumenDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +35,7 @@ interface UserDokumen {
 export default function UploadDokumen() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [dokumenList, setDokumenList] = useState<Dokumen[]>([]);
   const [userDokumen, setUserDokumen] = useState<UserDokumen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,6 +173,14 @@ export default function UploadDokumen() {
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Kembali
+          </Button>
           <h1 className="text-3xl font-bold mb-2">Upload Dokumen</h1>
           <p className="text-muted-foreground">
             Unggah dan kelola dokumen persyaratan PPPK Anda
