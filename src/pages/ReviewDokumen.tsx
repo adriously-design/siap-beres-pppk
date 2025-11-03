@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Eye, Search } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Eye, Search, Filter } from "lucide-react";
 
 interface PPPKUser {
   id: string;
@@ -26,25 +27,47 @@ export default function ReviewDokumen() {
   const [filteredUsers, setFilteredUsers] = useState<PPPKUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     fetchUsersWithDocuments();
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredUsers(users);
-    } else {
+    let filtered = users;
+
+    // Apply search filter
+    if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
-      setFilteredUsers(
-        users.filter(
-          (user) =>
-            user.full_name.toLowerCase().includes(query) ||
-            user.no_peserta.toLowerCase().includes(query)
-        )
+      filtered = filtered.filter(
+        (user) =>
+          user.full_name.toLowerCase().includes(query) ||
+          user.no_peserta.toLowerCase().includes(query)
       );
     }
-  }, [searchQuery, users]);
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((user) => {
+        const pendingCount = user.uploaded_count - user.verified_count - user.rejected_count;
+        
+        switch (statusFilter) {
+          case "belum_upload":
+            return user.uploaded_count === 0;
+          case "pending":
+            return pendingCount > 0 && user.rejected_count === 0;
+          case "ada_ditolak":
+            return user.rejected_count > 0;
+          case "selesai":
+            return user.uploaded_count > 0 && user.verified_count === user.uploaded_count;
+          default:
+            return true;
+        }
+      });
+    }
+
+    setFilteredUsers(filtered);
+  }, [searchQuery, statusFilter, users]);
 
   const fetchUsersWithDocuments = async () => {
     try {
@@ -139,14 +162,30 @@ export default function ReviewDokumen() {
             Daftar calon PPPK dan status dokumen mereka
           </p>
           
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari nama atau no peserta..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[250px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari nama atau no peserta..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[200px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="belum_upload">Belum Upload</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="ada_ditolak">Ada Ditolak</SelectItem>
+                <SelectItem value="selesai">Selesai</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
