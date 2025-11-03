@@ -41,18 +41,42 @@ export function ImportUserDialog() {
 
     try {
       const text = await file.text();
-      const lines = text.trim().split('\n').filter(line => line.trim().length > 0);
+      
+      // Handle different line endings and normalize
+      const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const lines = normalizedText.trim().split('\n').filter(line => line.trim().length > 0);
       
       const users = lines.map((line, index) => {
+        // Remove BOM if present
+        let cleanLine = line.replace(/^\uFEFF/, '');
+        
         // Remove dangerous CSV formula characters
-        const safeLine = line.replace(/^[=+\-@]/, '');
-        const parts = safeLine.split(',').map(s => s.trim());
+        cleanLine = cleanLine.replace(/^[=+\-@]/, '');
+        
+        // Handle quoted fields and split by comma
+        const parts: string[] = [];
+        let currentPart = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < cleanLine.length; i++) {
+          const char = cleanLine[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            parts.push(currentPart.trim());
+            currentPart = '';
+          } else {
+            currentPart += char;
+          }
+        }
+        parts.push(currentPart.trim());
         
         if (parts.length !== 3) {
-          throw new Error(`Baris ${index + 1}: Format tidak valid`);
+          throw new Error(`Baris ${index + 1}: Format tidak valid (ditemukan ${parts.length} kolom, dibutuhkan 3)`);
         }
         
-        const [no_peserta, nik, full_name] = parts;
+        const [no_peserta, nik, full_name] = parts.map(p => p.replace(/^["']|["']$/g, '').trim());
         
         // Validate NIK is numeric
         if (!/^\d{16}$/.test(nik)) {

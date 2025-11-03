@@ -14,6 +14,7 @@ import DashboardAdmin from "./pages/DashboardAdmin";
 import ManajemenPengguna from "./pages/ManajemenPengguna";
 import UploadDokumen from "./pages/UploadDokumen";
 import EBimtek from "./pages/EBimtek";
+import KelolaEBimtek from "./pages/KelolaEBimtek";
 import ReviewDokumen from "./pages/ReviewDokumen";
 import ReviewDokumenDetail from "./pages/ReviewDokumenDetail";
 import NotFound from "./pages/NotFound";
@@ -73,6 +74,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/kelola-e-bimtek" 
+              element={
+                <ProtectedRoute allowedRoles={['admin_bkd']}>
+                  <KelolaEBimtek />
+                </ProtectedRoute>
+              } 
+            />
+            <Route
               path="/review-dokumen" 
               element={
                 <ProtectedRoute allowedRoles={['admin_bkd']}>

@@ -10,10 +10,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Navbar = () => {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
+  const [fullName, setFullName] = useState<string>("");
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user && userRole === 'calon_pppk') {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        
+        if (data) {
+          setFullName(data.full_name);
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [user, userRole]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -39,7 +60,7 @@ export const Navbar = () => {
               <Button variant="ghost" className="gap-2">
                 <User className="h-4 w-4" />
                 <span className="hidden sm:inline">
-                  {userRole === 'admin_bkd' ? 'Admin BKD' : 'Calon PPPK'}
+                  {userRole === 'admin_bkd' ? 'Admin BKD' : (fullName || 'Calon PPPK')}
                 </span>
               </Button>
             </DropdownMenuTrigger>

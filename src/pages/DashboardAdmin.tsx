@@ -214,20 +214,21 @@ export default function DashboardAdmin() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/kelola-e-bimtek")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-accent" />
                 Kelola E-Bimtek
               </CardTitle>
               <CardDescription>
-                Edit panduan dan FAQ
+                Kelola konten e-bimtek untuk calon PPPK
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Badge variant="outline" className="text-lg px-4 py-2">
-                Lihat Semua
-              </Badge>
+              <Button variant="outline" className="w-full">
+                Kelola Konten
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
             </CardContent>
           </Card>
         </div>
