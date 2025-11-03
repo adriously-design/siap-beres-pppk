@@ -41,8 +41,10 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
-              <h2 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">
-                Selamat Datang di Portal PPPK
+              <h2 className="text-4xl md:text-5xl font-bold text-foreground leading-tight overflow-hidden">
+                <span className="inline-block animate-slide-in-right">
+                  Selamat Datang di Portal PPPK
+                </span>
               </h2>
               <p className="text-xl text-muted-foreground">
                 Sistem Informasi Administrasi PPPK Berbasis Digital untuk Provinsi Nusa Tenggara Timur
