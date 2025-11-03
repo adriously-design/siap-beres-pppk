@@ -81,66 +81,58 @@ const handler = async (req: Request): Promise<Response> => {
 
     const profile = profiles[0];
 
-    // Check if user already activated
-    if (profile.status_aktivasi) {
-      // User already has account, just update password
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        profile.id,
-        { password: new_password }
-      );
+    // --- PERBAIKAN LOGIKA DIMULAI DI SINI ---
 
-      if (updateError) {
-        console.error('Error updating password:', updateError);
-        return new Response(
-          JSON.stringify({ error: 'Gagal mengubah password' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+    // Baik itu aktivasi pertama kali atau reset, pengguna auth diasumsikan sudah ada
+    // (berdasarkan 'profile.id' yang seharusnya merupakan ID pengguna auth).
+    // Kita hanya perlu update password mereka.
+    
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      profile.id,
+      { password: new_password }
+    );
 
-      console.log('Password updated for existing user:', profile.id);
-      
+    if (updateError) {
+      console.error('Error updating password (reset/activation):', updateError);
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Password berhasil diubah. Silahkan login dengan password baru.',
-          activated: true
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // First time activation - create auth user
-    // The trigger handle_new_user will automatically update the existing profile
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: `${no_peserta}@pppk.bkd.ntt.go.id`,
-      password: new_password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: profile.full_name,
-        no_peserta: profile.no_peserta,
-        nik: profile.nik,
-        role: 'calon_pppk'
-      }
-    });
-
-    if (createError) {
-      console.error('Error creating user:', createError);
-      return new Response(
-        JSON.stringify({ error: 'Gagal membuat akun. ' + createError.message }),
+        JSON.stringify({ error: `Gagal mengubah password: ${updateError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('First time activation successful for user:', newUser.user.id);
+    // Tentukan pesan balasan SEBELUM kita update status
+    const wasActivated = profile.status_aktivasi;
+    const message = wasActivated
+      ? 'Password berhasil diubah. Silahkan login dengan password baru.'
+      : 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.';
 
+    // Jika ini adalah aktivasi pertama kali (status_aktivasi false),
+    // update status di tabel profiles SEKARANG.
+    if (!wasActivated) {
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ status_aktivasi: true })
+        .eq('id', profile.id); // Update profil yang sesuai
+
+      if (profileUpdateError) {
+        console.error('Password updated, but failed to set status_aktivasi:', profileUpdateError);
+        // Ini tidak fatal, user bisa login, tapi statusnya masih false
+        // Kita tetap kirim sukses tapi catat errornya di log server
+      }
+    }
+
+    console.log(`Password updated/activated for user: ${profile.id}`);
+        
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Akun berhasil diaktifkan! Silahkan login dengan No Peserta dan password baru Anda.',
-        activated: false
+        message: message,
+        activated: !wasActivated // Kirim true jika INI adalah proses aktivasi
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
+    // --- PERBAIKAN LOGIKA SELESAI ---
 
   } catch (error) {
     console.error('Error in reset-password function:', error);
