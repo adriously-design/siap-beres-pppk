@@ -89,102 +89,54 @@ export function UploadDokumenDialog({
     setUploadProgress(0);
 
     try {
-      // Generate unique filename
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${Date.now()}_${selectedFile.name}`;
-      const filePath = `${user.id}/${dokumen.id}/${fileName}`;
+      // Convert file to base64
+      const reader = new FileReader();
+      const fileBase64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          // Remove data URL prefix (e.g., "data:application/pdf;base64,")
+          const base64Data = base64.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
 
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('dokumen-pppk')
-        .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      const fileBase64 = await fileBase64Promise;
+      setUploadProgress(25);
 
-      if (uploadError) throw uploadError;
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
 
-      setUploadProgress(50);
-
-      // Check if user already has this document
-      const { data: existingDoc } = await supabase
-        .from('user_dokumen')
-        .select('id, file_path')
-        .eq('user_id', user.id)
-        .eq('dokumen_id', dokumen.id)
-        .single();
+      // Call edge function to upload to Google Drive
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-to-drive`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileBase64: fileBase64,
+            mimeType: selectedFile.type || 'application/octet-stream',
+            dokumenId: dokumen.id,
+            fileSizeKb: Math.round(selectedFile.size / 1024),
+            userNote: userNote || undefined,
+          }),
+        }
+      );
 
       setUploadProgress(75);
 
-      if (existingDoc) {
-        // Get existing history
-        const { data: docData } = await supabase
-          .from('user_dokumen')
-          .select('catatan_history')
-          .eq('id', existingDoc.id)
-          .single();
-
-        const existingHistory = Array.isArray(docData?.catatan_history) ? docData.catatan_history : [];
-        
-        // Add new note to history if provided
-        const newHistory = userNote.trim() 
-          ? [
-              ...existingHistory,
-              {
-                type: 'user',
-                message: userNote,
-                timestamp: new Date().toISOString()
-              }
-            ]
-          : existingHistory;
-
-        // Delete old file from storage
-        await supabase.storage
-          .from('dokumen-pppk')
-          .remove([existingDoc.file_path]);
-
-        // Update existing record
-        const { error: updateError } = await supabase
-          .from('user_dokumen')
-          .update({
-            file_name: selectedFile.name,
-            file_path: filePath,
-            file_size_kb: Math.round(selectedFile.size / 1024),
-            status_verifikasi: 'pending',
-            uploaded_at: new Date().toISOString(),
-            catatan_admin: null,
-            catatan_user: userNote || null,
-            catatan_history: newHistory,
-            verified_at: null,
-          })
-          .eq('id', existingDoc.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Prepare history entry for new document
-        const historyEntry = userNote.trim() ? [{
-          type: 'user',
-          message: userNote,
-          timestamp: new Date().toISOString()
-        }] : [];
-
-        // Insert new record
-        const { error: insertError } = await supabase
-          .from('user_dokumen')
-          .insert({
-            user_id: user.id,
-            dokumen_id: dokumen.id,
-            file_name: selectedFile.name,
-            file_path: filePath,
-            file_size_kb: Math.round(selectedFile.size / 1024),
-            status_verifikasi: 'pending',
-            catatan_user: userNote || null,
-            catatan_history: historyEntry,
-          });
-
-        if (insertError) throw insertError;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
       }
 
+      await response.json();
       setUploadProgress(100);
 
       toast({

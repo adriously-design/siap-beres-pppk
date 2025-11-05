@@ -113,14 +113,9 @@ export default function UploadDokumen() {
 
   const handlePreview = async (userDoc: UserDokumen) => {
     try {
-      const { data, error } = await supabase.storage
-        .from('dokumen-pppk')
-        .createSignedUrl(userDoc.file_path, 60);
-
-      if (error) throw error;
-
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
+      // file_path now contains Google Drive public URL
+      if (userDoc.file_path) {
+        window.open(userDoc.file_path, '_blank');
       }
     } catch (error) {
       console.error('Error previewing file:', error);
@@ -136,20 +131,29 @@ export default function UploadDokumen() {
     if (!confirm('Apakah Anda yakin ingin menghapus dokumen ini?')) return;
 
     try {
-      // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from('dokumen-pppk')
-        .remove([userDoc.file_path]);
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
 
-      if (storageError) throw storageError;
+      // Call edge function to delete from Google Drive and database
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-from-drive`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userDokumenId: userDoc.id,
+          }),
+        }
+      );
 
-      // Delete from database
-      const { error: dbError } = await supabase
-        .from('user_dokumen')
-        .delete()
-        .eq('id', userDoc.id);
-
-      if (dbError) throw dbError;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Delete failed');
+      }
 
       toast({
         title: "Berhasil",
