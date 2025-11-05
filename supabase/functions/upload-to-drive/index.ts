@@ -43,13 +43,13 @@ async function createGoogleJWT(serviceAccountEmail: string, privateKey: string):
   
   const signatureInput = `${headerBase64}.${payloadBase64}`;
   
-  // Import private key
+  // Import private key - properly strip PEM headers and whitespace
   const pemHeader = "-----BEGIN PRIVATE KEY-----";
   const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKey.substring(
-    pemHeader.length,
-    privateKey.length - pemFooter.length
-  ).trim();
+  const pemContents = privateKey
+    .replace(pemHeader, '')
+    .replace(pemFooter, '')
+    .replace(/\s/g, ''); // Remove all whitespace including newlines
   
   const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
   
