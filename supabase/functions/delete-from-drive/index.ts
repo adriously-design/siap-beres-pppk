@@ -10,6 +10,91 @@ interface DeleteRequest {
   userDokumenId: string;
 }
 
+// Helper function to create JWT for Google API
+async function createGoogleJWT(serviceAccountEmail: string, privateKey: string): Promise<string> {
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT'
+  };
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: serviceAccountEmail,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  };
+
+  const encoder = new TextEncoder();
+  const headerBase64 = btoa(JSON.stringify(header))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  const payloadBase64 = btoa(JSON.stringify(payload))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  
+  const signatureInput = `${headerBase64}.${payloadBase64}`;
+  
+  // Import private key
+  const pemHeader = "-----BEGIN PRIVATE KEY-----";
+  const pemFooter = "-----END PRIVATE KEY-----";
+  const pemContents = privateKey.substring(
+    pemHeader.length,
+    privateKey.length - pemFooter.length
+  ).trim();
+  
+  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    binaryDer,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    encoder.encode(signatureInput)
+  );
+
+  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  return `${signatureInput}.${signatureBase64}`;
+}
+
+// Helper function to get Google access token
+async function getGoogleAccessToken(serviceAccountEmail: string, privateKey: string): Promise<string> {
+  const jwtToken = await createGoogleJWT(serviceAccountEmail, privateKey);
+
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
+  });
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text();
+    console.error('Token response error:', errorText);
+    throw new Error('Failed to get access token');
+  }
+
+  const { access_token } = await tokenResponse.json();
+  return access_token;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -32,6 +117,8 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
+    console.log('Delete request from user:', user.id);
+
     const { userDokumenId } = await req.json() as DeleteRequest;
 
     // Get document info
@@ -39,7 +126,7 @@ serve(async (req) => {
       .from('user_dokumen')
       .select('file_path, user_id')
       .eq('id', userDokumenId)
-      .single();
+      .maybeSingle();
 
     if (docError || !userDoc) {
       throw new Error('Document not found');
@@ -64,87 +151,25 @@ serve(async (req) => {
       throw new Error('Invalid file path');
     }
 
-    // Create JWT for Google API
-    const header = {
-      alg: 'RS256',
-      typ: 'JWT'
-    };
-
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      iss: serviceAccountEmail,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
-      iat: now
-    };
-
-    const encoder = new TextEncoder();
-    const headerBase64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    const payloadBase64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    
-    const signatureInput = `${headerBase64}.${payloadBase64}`;
-    
-    // Import private key
-    const pemHeader = "-----BEGIN PRIVATE KEY-----";
-    const pemFooter = "-----END PRIVATE KEY-----";
-    const pemContents = privateKey.substring(
-      pemHeader.length,
-      privateKey.length - pemFooter.length
-    ).trim();
-    
-    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-    
-    const key = await crypto.subtle.importKey(
-      'pkcs8',
-      binaryDer,
-      {
-        name: 'RSASSA-PKCS1-v1_5',
-        hash: 'SHA-256',
-      },
-      false,
-      ['sign']
-    );
-
-    const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
-      key,
-      encoder.encode(signatureInput)
-    );
-
-    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-
-    const jwtToken = `${signatureInput}.${signatureBase64}`;
-
-    // Get access token
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to get access token');
-    }
-
-    const { access_token } = await tokenResponse.json();
+    console.log('Getting Google access token...');
+    const accessToken = await getGoogleAccessToken(serviceAccountEmail, privateKey);
 
     // Delete from Google Drive
+    console.log('Deleting file from Drive:', fileId);
     const driveResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
     });
 
     if (!driveResponse.ok && driveResponse.status !== 404) {
+      const errorText = await driveResponse.text();
+      console.error('Drive delete error:', errorText);
       throw new Error('Failed to delete from Google Drive');
     }
+
+    console.log('File deleted from Drive');
 
     // Delete from database
     const { error: deleteError } = await supabase
@@ -153,6 +178,7 @@ serve(async (req) => {
       .eq('id', userDokumenId);
 
     if (deleteError) throw deleteError;
+    console.log('Document deleted from database');
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -163,9 +189,10 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in delete-from-drive:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400 

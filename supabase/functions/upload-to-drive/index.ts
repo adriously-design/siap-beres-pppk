@@ -15,6 +15,91 @@ interface UploadRequest {
   userNote?: string;
 }
 
+// Helper function to create JWT for Google API
+async function createGoogleJWT(serviceAccountEmail: string, privateKey: string): Promise<string> {
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT'
+  };
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: serviceAccountEmail,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  };
+
+  const encoder = new TextEncoder();
+  const headerBase64 = btoa(JSON.stringify(header))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  const payloadBase64 = btoa(JSON.stringify(payload))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  
+  const signatureInput = `${headerBase64}.${payloadBase64}`;
+  
+  // Import private key
+  const pemHeader = "-----BEGIN PRIVATE KEY-----";
+  const pemFooter = "-----END PRIVATE KEY-----";
+  const pemContents = privateKey.substring(
+    pemHeader.length,
+    privateKey.length - pemFooter.length
+  ).trim();
+  
+  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    binaryDer,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    encoder.encode(signatureInput)
+  );
+
+  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  return `${signatureInput}.${signatureBase64}`;
+}
+
+// Helper function to get Google access token
+async function getGoogleAccessToken(serviceAccountEmail: string, privateKey: string): Promise<string> {
+  const jwtToken = await createGoogleJWT(serviceAccountEmail, privateKey);
+
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
+  });
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text();
+    console.error('Token response error:', errorText);
+    throw new Error('Failed to get access token');
+  }
+
+  const { access_token } = await tokenResponse.json();
+  return access_token;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -37,6 +122,8 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
+    console.log('Upload request from user:', user.id);
+
     const { fileName, fileBase64, mimeType, dokumenId, fileSizeKb, userNote } = await req.json() as UploadRequest;
 
     // Get Google Drive credentials
@@ -48,76 +135,8 @@ serve(async (req) => {
       throw new Error('Missing Google Drive configuration');
     }
 
-    // Create JWT for Google API
-    const header = {
-      alg: 'RS256',
-      typ: 'JWT'
-    };
-
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      iss: serviceAccountEmail,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
-      iat: now
-    };
-
-    // Import crypto for signing
-    const encoder = new TextEncoder();
-    const headerBase64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    const payloadBase64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    
-    const signatureInput = `${headerBase64}.${payloadBase64}`;
-    
-    // Import private key
-    const pemHeader = "-----BEGIN PRIVATE KEY-----";
-    const pemFooter = "-----END PRIVATE KEY-----";
-    const pemContents = privateKey.substring(
-      pemHeader.length,
-      privateKey.length - pemFooter.length
-    ).trim();
-    
-    const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-    
-    const key = await crypto.subtle.importKey(
-      'pkcs8',
-      binaryDer,
-      {
-        name: 'RSASSA-PKCS1-v1_5',
-        hash: 'SHA-256',
-      },
-      false,
-      ['sign']
-    );
-
-    const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
-      key,
-      encoder.encode(signatureInput)
-    );
-
-    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-
-    const jwtToken = `${signatureInput}.${signatureBase64}`;
-
-    // Get access token
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to get access token');
-    }
-
-    const { access_token } = await tokenResponse.json();
+    console.log('Getting Google access token...');
+    const accessToken = await getGoogleAccessToken(serviceAccountEmail, privateKey);
 
     // Upload to Google Drive
     const metadata = {
@@ -131,22 +150,14 @@ serve(async (req) => {
     const closeDelim = "\r\n--" + boundary + "--";
 
     const metadataPart = delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata);
-    
-    // Decode base64 to binary
-    const binaryString = atob(fileBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
     const filePart = delimiter + `Content-Type: ${mimeType}\r\n` + 'Content-Transfer-Encoding: base64\r\n\r\n' + fileBase64;
-
     const multipartRequestBody = metadataPart + filePart + closeDelim;
 
+    console.log('Uploading to Google Drive...');
     const driveResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
       body: multipartRequestBody,
@@ -154,17 +165,19 @@ serve(async (req) => {
 
     if (!driveResponse.ok) {
       const errorText = await driveResponse.text();
+      console.error('Drive upload error:', errorText);
       throw new Error(`Failed to upload to Google Drive: ${errorText}`);
     }
 
     const driveFile = await driveResponse.json();
     const fileId = driveFile.id;
+    console.log('File uploaded to Drive with ID:', fileId);
     
     // Make file publicly accessible
     await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -182,19 +195,20 @@ serve(async (req) => {
       .select('id, file_path, catatan_history')
       .eq('user_id', user.id)
       .eq('dokumen_id', dokumenId)
-      .single();
+      .maybeSingle();
 
     if (existingDoc) {
-      // If exists, try to delete old file from Google Drive (extract fileId from old path)
+      // Delete old file from Google Drive if exists
       const oldFileId = existingDoc.file_path.match(/id=([^&]+)/)?.[1];
       if (oldFileId) {
         try {
           await fetch(`https://www.googleapis.com/drive/v3/files/${oldFileId}`, {
             method: 'DELETE',
             headers: {
-              'Authorization': `Bearer ${access_token}`,
+              'Authorization': `Bearer ${accessToken}`,
             },
           });
+          console.log('Old file deleted from Drive');
         } catch (e) {
           console.error('Failed to delete old file:', e);
         }
@@ -229,6 +243,7 @@ serve(async (req) => {
         .eq('id', existingDoc.id);
 
       if (updateError) throw updateError;
+      console.log('Document updated in database');
     } else {
       // Insert new record
       const historyEntry = userNote?.trim() ? [{
@@ -251,6 +266,7 @@ serve(async (req) => {
         });
 
       if (insertError) throw insertError;
+      console.log('Document inserted into database');
     }
 
     return new Response(
@@ -266,9 +282,10 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in upload-to-drive:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400 
