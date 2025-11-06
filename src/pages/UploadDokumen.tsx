@@ -113,10 +113,32 @@ export default function UploadDokumen() {
 
   const handlePreview = async (userDoc: UserDokumen) => {
     try {
-      // file_path now contains R2 public URL
-      if (userDoc.file_path) {
-        window.open(userDoc.file_path, '_blank');
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      // Call edge function to get presigned URL
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-presigned-url-r2`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dokumenId: userDoc.id,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get presigned URL');
       }
+
+      const { presignedUrl } = await response.json();
+      window.open(presignedUrl, '_blank');
     } catch (error) {
       console.error('Error previewing file:', error);
       toast({

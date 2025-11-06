@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.delete-from-drive]
 verify_jwt = true
+
+[functions.get-presigned-url-r2]
+verify_jwt = true

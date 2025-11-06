@@ -109,9 +109,42 @@ export default function ReviewDokumenDetail() {
     }
   };
 
-  const handlePreview = (filePath: string) => {
-    // File path is now a public R2 URL, open directly
-    window.open(filePath, '_blank');
+  const handlePreview = async (docId: string) => {
+    try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+
+      // Call edge function to get presigned URL
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-presigned-url-r2`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dokumenId: docId,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get presigned URL');
+      }
+
+      const { presignedUrl } = await response.json();
+      window.open(presignedUrl, '_blank');
+    } catch (error) {
+      console.error('Error previewing file:', error);
+      toast({
+        title: "Error",
+        description: "Gagal membuka file",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleUpdateStatus = async (docId: string, status: 'verified' | 'rejected') => {
@@ -281,7 +314,7 @@ export default function ReviewDokumenDetail() {
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
-                      onClick={() => handlePreview(doc.file_path)}
+                      onClick={() => handlePreview(doc.id)}
                       size="sm"
                       className="flex-1"
                     >
