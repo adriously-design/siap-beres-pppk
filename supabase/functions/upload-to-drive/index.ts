@@ -42,12 +42,8 @@ async function createAwsSignature(
     .map(key => `${key}:${headers[key]}\n`)
     .join('');
   
-  // Hash payload
-  const payloadBuffer = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer;
-  const payloadHashBuffer = await crypto.subtle.digest('SHA-256', payloadBuffer);
-  const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  // Use the payload hash from headers
+  const payloadHash = headers['x-amz-content-sha256'];
   
   const canonicalRequest = [
     method,
@@ -155,10 +151,18 @@ serve(async (req) => {
     const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
     const url = new URL(`/${bucketName}/${filePath}`, endpoint);
     
+    // Calculate payload hash first for x-amz-content-sha256 header
+    const payloadBuffer = binaryData.buffer.slice(binaryData.byteOffset, binaryData.byteOffset + binaryData.byteLength) as ArrayBuffer;
+    const payloadHashBuffer = await crypto.subtle.digest('SHA-256', payloadBuffer);
+    const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
     const headers: Record<string, string> = {
       'host': url.host,
       'content-type': mimeType,
       'content-length': binaryData.length.toString(),
+      'x-amz-content-sha256': payloadHash,
     };
     
     const signedHeaders = await createAwsSignature(
@@ -204,6 +208,7 @@ serve(async (req) => {
           const deleteUrl = new URL(`/${bucketName}/${oldFilePath}`, endpoint);
           const deleteHeaders: Record<string, string> = {
             'host': deleteUrl.host,
+            'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', // empty payload hash
           };
           
           const signedDeleteHeaders = await createAwsSignature(
