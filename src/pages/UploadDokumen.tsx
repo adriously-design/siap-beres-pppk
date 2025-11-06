@@ -113,7 +113,7 @@ export default function UploadDokumen() {
 
   const handlePreview = async (userDoc: UserDokumen) => {
     try {
-      // file_path now contains Google Drive public URL
+      // file_path now contains R2 public URL
       if (userDoc.file_path) {
         window.open(userDoc.file_path, '_blank');
       }
@@ -135,7 +135,7 @@ export default function UploadDokumen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
-      // Call edge function to delete from Google Drive and database
+      // Call edge function to delete from R2 and database
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-from-drive`,
         {

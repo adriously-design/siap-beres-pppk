@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.583.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,89 +16,25 @@ interface UploadRequest {
   userNote?: string;
 }
 
-// Helper function to create JWT for Google API
-async function createGoogleJWT(serviceAccountEmail: string, privateKey: string): Promise<string> {
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT'
-  };
+// Helper function to create S3 client for R2
+function createR2Client() {
+  const accountId = Deno.env.get('R2_ACCOUNT_ID');
+  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID');
+  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY');
+  const endpoint = Deno.env.get('R2_ENDPOINT');
 
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: serviceAccountEmail,
-    scope: 'https://www.googleapis.com/auth/drive.file',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now
-  };
-
-  const encoder = new TextEncoder();
-  const headerBase64 = btoa(JSON.stringify(header))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-  const payloadBase64 = btoa(JSON.stringify(payload))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-  
-  const signatureInput = `${headerBase64}.${payloadBase64}`;
-  
-  // Import private key - properly strip PEM headers and whitespace
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKey
-    .replace(pemHeader, '')
-    .replace(pemFooter, '')
-    .replace(/\s/g, ''); // Remove all whitespace including newlines
-  
-  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    binaryDer,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
-  );
-
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    encoder.encode(signatureInput)
-  );
-
-  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  return `${signatureInput}.${signatureBase64}`;
-}
-
-// Helper function to get Google access token
-async function getGoogleAccessToken(serviceAccountEmail: string, privateKey: string): Promise<string> {
-  const jwtToken = await createGoogleJWT(serviceAccountEmail, privateKey);
-
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
-  });
-
-  if (!tokenResponse.ok) {
-    const errorText = await tokenResponse.text();
-    console.error('Token response error:', errorText);
-    throw new Error('Failed to get access token');
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('Missing R2 credentials');
   }
 
-  const { access_token } = await tokenResponse.json();
-  return access_token;
+  return new S3Client({
+    region: 'auto',
+    endpoint: endpoint || `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
 }
 
 serve(async (req) => {
@@ -126,68 +63,39 @@ serve(async (req) => {
 
     const { fileName, fileBase64, mimeType, dokumenId, fileSizeKb, userNote } = await req.json() as UploadRequest;
 
-    // Get Google Drive credentials
-    const folderId = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
-    const serviceAccountEmail = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_EMAIL');
-    const privateKey = Deno.env.get('GOOGLE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
+    // Get R2 configuration
+    const bucketName = Deno.env.get('R2_BUCKET_NAME');
+    const publicUrl = Deno.env.get('R2_PUBLIC_URL');
 
-    if (!folderId || !serviceAccountEmail || !privateKey) {
-      throw new Error('Missing Google Drive configuration');
+    if (!bucketName || !publicUrl) {
+      throw new Error('Missing R2 configuration');
     }
 
-    console.log('Getting Google access token...');
-    const accessToken = await getGoogleAccessToken(serviceAccountEmail, privateKey);
+    // Create R2 client
+    const r2Client = createR2Client();
 
-    // Upload to Google Drive
-    const metadata = {
-      name: fileName,
-      parents: [folderId],
-      mimeType: mimeType
-    };
+    // Generate unique file path
+    const timestamp = new Date().getTime();
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `dokumen/${user.id}/${timestamp}_${sanitizedFileName}`;
 
-    const boundary = '-------314159265358979323846';
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const closeDelim = "\r\n--" + boundary + "--";
+    // Convert base64 to binary
+    const binaryData = Uint8Array.from(atob(fileBase64), c => c.charCodeAt(0));
 
-    const metadataPart = delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata);
-    const filePart = delimiter + `Content-Type: ${mimeType}\r\n` + 'Content-Transfer-Encoding: base64\r\n\r\n' + fileBase64;
-    const multipartRequestBody = metadataPart + filePart + closeDelim;
-
-    console.log('Uploading to Google Drive...');
-    const driveResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body: multipartRequestBody,
+    console.log('Uploading file to R2...');
+    // Upload to R2
+    const putCommand = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: filePath,
+      Body: binaryData,
+      ContentType: mimeType,
     });
 
-    if (!driveResponse.ok) {
-      const errorText = await driveResponse.text();
-      console.error('Drive upload error:', errorText);
-      throw new Error(`Failed to upload to Google Drive: ${errorText}`);
-    }
-
-    const driveFile = await driveResponse.json();
-    const fileId = driveFile.id;
-    console.log('File uploaded to Drive with ID:', fileId);
-    
-    // Make file publicly accessible
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        role: 'reader',
-        type: 'anyone',
-      }),
-    });
+    await r2Client.send(putCommand);
+    console.log('File uploaded to R2:', filePath);
 
     // Generate public URL
-    const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const filePublicUrl = `${publicUrl}/${filePath}`;
 
     // Check if user already has this document
     const { data: existingDoc } = await supabase
@@ -198,17 +106,16 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existingDoc) {
-      // Delete old file from Google Drive if exists
-      const oldFileId = existingDoc.file_path.match(/id=([^&]+)/)?.[1];
-      if (oldFileId) {
+      // Delete old file from R2 if exists
+      if (existingDoc.file_path) {
+        const oldFilePath = existingDoc.file_path.replace(publicUrl + '/', '');
         try {
-          await fetch(`https://www.googleapis.com/drive/v3/files/${oldFileId}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
+          const deleteCommand = new DeleteObjectCommand({
+            Bucket: bucketName,
+            Key: oldFilePath,
           });
-          console.log('Old file deleted from Drive');
+          await r2Client.send(deleteCommand);
+          console.log('Old file deleted from R2');
         } catch (e) {
           console.error('Failed to delete old file:', e);
         }
@@ -231,7 +138,7 @@ serve(async (req) => {
         .from('user_dokumen')
         .update({
           file_name: fileName,
-          file_path: publicUrl,
+          file_path: filePublicUrl,
           file_size_kb: fileSizeKb,
           status_verifikasi: 'pending',
           uploaded_at: new Date().toISOString(),
@@ -258,7 +165,7 @@ serve(async (req) => {
           user_id: user.id,
           dokumen_id: dokumenId,
           file_name: fileName,
-          file_path: publicUrl,
+          file_path: filePublicUrl,
           file_size_kb: fileSizeKb,
           status_verifikasi: 'pending',
           catatan_user: userNote || null,
@@ -272,8 +179,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        fileId,
-        publicUrl 
+        filePath,
+        publicUrl: filePublicUrl,
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -282,7 +189,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in upload-to-drive:', error);
+    console.error('Error in upload-to-r2:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
       JSON.stringify({ error: errorMessage }),
