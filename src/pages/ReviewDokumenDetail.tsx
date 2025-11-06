@@ -109,22 +109,9 @@ export default function ReviewDokumenDetail() {
     }
   };
 
-  const handlePreview = async (filePath: string) => {
-    try {
-      const { data } = await supabase.storage
-        .from('dokumen-pppk')
-        .createSignedUrl(filePath, 3600);
-
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Gagal membuka file",
-        variant: "destructive",
-      });
-    }
+  const handlePreview = (filePath: string) => {
+    // File path is now a public R2 URL, open directly
+    window.open(filePath, '_blank');
   };
 
   const handleUpdateStatus = async (docId: string, status: 'verified' | 'rejected') => {
