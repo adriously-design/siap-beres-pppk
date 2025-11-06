@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.583.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,25 +15,93 @@ interface UploadRequest {
   userNote?: string;
 }
 
-// Helper function to create S3 client for R2
-function createR2Client() {
-  const accountId = Deno.env.get('R2_ACCOUNT_ID');
-  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID');
-  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY');
-  const endpoint = Deno.env.get('R2_ENDPOINT');
-
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error('Missing R2 credentials');
+// AWS Signature V4 helper
+async function createAwsSignature(
+  method: string,
+  url: URL,
+  headers: Record<string, string>,
+  payload: Uint8Array,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string
+): Promise<Record<string, string>> {
+  const encoder = new TextEncoder();
+  const algorithm = 'AWS4-HMAC-SHA256';
+  const service = 's3';
+  
+  const now = new Date();
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  
+  // Create canonical request
+  const canonicalUri = url.pathname;
+  const canonicalQuerystring = '';
+  
+  const signedHeaders = Object.keys(headers).sort().join(';');
+  const canonicalHeaders = Object.keys(headers).sort()
+    .map(key => `${key}:${headers[key]}\n`)
+    .join('');
+  
+  // Hash payload
+  const payloadBuffer = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer;
+  const payloadHashBuffer = await crypto.subtle.digest('SHA-256', payloadBuffer);
+  const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQuerystring,
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  ].join('\n');
+  
+  // Create string to sign
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const canonicalRequestHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest));
+  const canonicalRequestHash = Array.from(new Uint8Array(canonicalRequestHashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  const stringToSign = [
+    algorithm,
+    amzDate,
+    credentialScope,
+    canonicalRequestHash
+  ].join('\n');
+  
+  // Calculate signature
+  async function hmac(key: ArrayBuffer, data: string): Promise<ArrayBuffer> {
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    return await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
   }
-
-  return new S3Client({
-    region: 'auto',
-    endpoint: endpoint || `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
+  
+  let key: ArrayBuffer = encoder.encode(`AWS4${secretAccessKey}`).buffer;
+  key = await hmac(key, dateStamp);
+  key = await hmac(key, region);
+  key = await hmac(key, service);
+  key = await hmac(key, 'aws4_request');
+  const signatureArray = await hmac(key, stringToSign);
+  const signature = Array.from(new Uint8Array(signatureArray))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  // Create authorization header
+  const authorization = `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  
+  return {
+    ...headers,
+    'Authorization': authorization,
+    'x-amz-date': amzDate,
+  };
 }
 
 serve(async (req) => {
@@ -64,15 +131,15 @@ serve(async (req) => {
     const { fileName, fileBase64, mimeType, dokumenId, fileSizeKb, userNote } = await req.json() as UploadRequest;
 
     // Get R2 configuration
+    const accountId = Deno.env.get('R2_ACCOUNT_ID');
+    const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID');
+    const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY');
     const bucketName = Deno.env.get('R2_BUCKET_NAME');
     const publicUrl = Deno.env.get('R2_PUBLIC_URL');
 
-    if (!bucketName || !publicUrl) {
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucketName || !publicUrl) {
       throw new Error('Missing R2 configuration');
     }
-
-    // Create R2 client
-    const r2Client = createR2Client();
 
     // Generate unique file path
     const timestamp = new Date().getTime();
@@ -83,15 +150,39 @@ serve(async (req) => {
     const binaryData = Uint8Array.from(atob(fileBase64), c => c.charCodeAt(0));
 
     console.log('Uploading file to R2...');
-    // Upload to R2
-    const putCommand = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: filePath,
-      Body: binaryData,
-      ContentType: mimeType,
+    
+    // Prepare R2 upload using AWS Signature V4
+    const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+    const url = new URL(`/${bucketName}/${filePath}`, endpoint);
+    
+    const headers: Record<string, string> = {
+      'host': url.host,
+      'content-type': mimeType,
+      'content-length': binaryData.length.toString(),
+    };
+    
+    const signedHeaders = await createAwsSignature(
+      'PUT',
+      url,
+      headers,
+      binaryData,
+      accessKeyId,
+      secretAccessKey,
+      'auto'
+    );
+
+    const uploadResponse = await fetch(url.toString(), {
+      method: 'PUT',
+      headers: signedHeaders,
+      body: binaryData,
     });
 
-    await r2Client.send(putCommand);
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error('R2 upload error:', errorText);
+      throw new Error(`Failed to upload to R2: ${uploadResponse.status} ${errorText}`);
+    }
+
     console.log('File uploaded to R2:', filePath);
 
     // Generate public URL
@@ -110,11 +201,25 @@ serve(async (req) => {
       if (existingDoc.file_path) {
         const oldFilePath = existingDoc.file_path.replace(publicUrl + '/', '');
         try {
-          const deleteCommand = new DeleteObjectCommand({
-            Bucket: bucketName,
-            Key: oldFilePath,
+          const deleteUrl = new URL(`/${bucketName}/${oldFilePath}`, endpoint);
+          const deleteHeaders: Record<string, string> = {
+            'host': deleteUrl.host,
+          };
+          
+          const signedDeleteHeaders = await createAwsSignature(
+            'DELETE',
+            deleteUrl,
+            deleteHeaders,
+            new Uint8Array(0),
+            accessKeyId,
+            secretAccessKey,
+            'auto'
+          );
+
+          await fetch(deleteUrl.toString(), {
+            method: 'DELETE',
+            headers: signedDeleteHeaders,
           });
-          await r2Client.send(deleteCommand);
           console.log('Old file deleted from R2');
         } catch (e) {
           console.error('Failed to delete old file:', e);
