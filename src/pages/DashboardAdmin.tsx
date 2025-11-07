@@ -33,25 +33,38 @@ export default function DashboardAdmin() {
 
   const fetchStats = async () => {
     try {
-      // Fetch total active users (Calon PPPK only) - join with profiles to ensure user still exists
-      const { data: activeUsers } = await supabase
+      // Fetch all active profiles (users that still exist)
+      const { data: activeProfiles } = await supabase
+        .from('profiles')
+        .select('id');
+      
+      const activeUserIds = new Set(activeProfiles?.map(p => p.id) || []);
+
+      // Fetch user roles for Calon PPPK
+      const { data: userRoles } = await supabase
         .from('user_roles')
-        .select('user_id, profiles!inner(id)')
+        .select('user_id')
         .eq('role', 'calon_pppk');
 
-      // Fetch document stats - only documents from existing users
+      // Filter only active users
+      const activePPPK = userRoles?.filter(ur => activeUserIds.has(ur.user_id)) || [];
+
+      // Fetch all documents
       const { data: allDocs } = await supabase
         .from('user_dokumen')
-        .select('status_verifikasi, profiles!inner(id)')
+        .select('status_verifikasi, user_id')
         .order('uploaded_at', { ascending: false });
 
-      const totalDocuments = allDocs?.length || 0;
-      const pendingReviews = allDocs?.filter(d => d.status_verifikasi === 'pending').length || 0;
-      const verifiedDocs = allDocs?.filter(d => d.status_verifikasi === 'verified').length || 0;
-      const rejectedDocs = allDocs?.filter(d => d.status_verifikasi === 'rejected').length || 0;
+      // Filter only documents from active users
+      const activeUserDocs = allDocs?.filter(d => activeUserIds.has(d.user_id)) || [];
+
+      const totalDocuments = activeUserDocs.length;
+      const pendingReviews = activeUserDocs.filter(d => d.status_verifikasi === 'pending').length;
+      const verifiedDocs = activeUserDocs.filter(d => d.status_verifikasi === 'verified').length;
+      const rejectedDocs = activeUserDocs.filter(d => d.status_verifikasi === 'rejected').length;
 
       setStats({
-        totalUsers: activeUsers?.length || 0,
+        totalUsers: activePPPK.length,
         totalDocuments,
         pendingReviews,
         verifiedDocs,
