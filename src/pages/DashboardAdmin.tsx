@@ -29,6 +29,37 @@ export default function DashboardAdmin() {
 
   useEffect(() => {
     fetchStats();
+
+    // Setup realtime subscription for stats updates
+    const channel = supabase
+      .channel('admin-stats-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_dokumen'
+        },
+        () => {
+          fetchStats(); // Refresh stats when documents change
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        () => {
+          fetchStats(); // Refresh stats when users change
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchStats = async () => {
