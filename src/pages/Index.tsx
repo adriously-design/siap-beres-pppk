@@ -26,11 +26,11 @@ const Index = () => {
               </div>
             </div>
             <Button 
-              onClick={() => navigate('/auth-pppk')}
+              onClick={() => window.open('https://bkd.nttprov.go.id/', '_blank')}
               variant="secondary"
               size="lg"
             >
-              Login PPPK
+              Website BKD NTT
             </Button>
           </div>
         </div>

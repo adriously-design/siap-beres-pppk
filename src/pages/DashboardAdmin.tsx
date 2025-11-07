@@ -33,16 +33,17 @@ export default function DashboardAdmin() {
 
   const fetchStats = async () => {
     try {
-      // Fetch total users (Calon PPPK only)
-      const { count: totalUsers } = await supabase
+      // Fetch total active users (Calon PPPK only) - join with profiles to ensure user still exists
+      const { data: activeUsers } = await supabase
         .from('user_roles')
-        .select('*', { count: 'exact', head: true })
+        .select('user_id, profiles!inner(id)')
         .eq('role', 'calon_pppk');
 
-      // Fetch document stats
+      // Fetch document stats - only documents from existing users
       const { data: allDocs } = await supabase
         .from('user_dokumen')
-        .select('status_verifikasi');
+        .select('status_verifikasi, profiles!inner(id)')
+        .order('uploaded_at', { ascending: false });
 
       const totalDocuments = allDocs?.length || 0;
       const pendingReviews = allDocs?.filter(d => d.status_verifikasi === 'pending').length || 0;
@@ -50,7 +51,7 @@ export default function DashboardAdmin() {
       const rejectedDocs = allDocs?.filter(d => d.status_verifikasi === 'rejected').length || 0;
 
       setStats({
-        totalUsers: totalUsers || 0,
+        totalUsers: activeUsers?.length || 0,
         totalDocuments,
         pendingReviews,
         verifiedDocs,
