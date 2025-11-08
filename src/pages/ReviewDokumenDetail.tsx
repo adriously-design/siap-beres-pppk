@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { MessageHistoryDialog } from "@/components/MessageHistoryDialog";
 import { ArrowLeft, FileText, CheckCircle2, XCircle, Eye, MessageSquare } from "lucide-react";
@@ -47,6 +48,8 @@ export default function ReviewDokumenDetail() {
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedHistory, setSelectedHistory] = useState<any[]>([]);
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [batchNote, setBatchNote] = useState("");
 
   useEffect(() => {
     if (userId) {
@@ -200,6 +203,89 @@ export default function ReviewDokumenDetail() {
     setHistoryDialogOpen(true);
   };
 
+  const toggleDocSelection = (docId: string) => {
+    const newSelected = new Set(selectedDocs);
+    if (newSelected.has(docId)) {
+      newSelected.delete(docId);
+    } else {
+      newSelected.add(docId);
+    }
+    setSelectedDocs(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDocs.size === documents.length) {
+      setSelectedDocs(new Set());
+    } else {
+      setSelectedDocs(new Set(documents.map(d => d.id)));
+    }
+  };
+
+  const handleBatchUpdate = async (status: 'verified' | 'rejected') => {
+    if (selectedDocs.size === 0) {
+      toast({
+        title: "Error",
+        description: "Pilih minimal satu dokumen",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUpdating('batch');
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const updatePromises = Array.from(selectedDocs).map(async (docId) => {
+        const doc = documents.find(d => d.id === docId);
+        if (!doc) return;
+
+        const existingHistory = Array.isArray(doc.catatan_history) ? doc.catatan_history : [];
+        const newHistory = [
+          ...existingHistory,
+          {
+            type: 'admin',
+            message: batchNote || `Batch ${status === 'verified' ? 'verifikasi' : 'penolakan'}`,
+            timestamp: new Date().toISOString(),
+            admin_id: user.id,
+            action: status
+          }
+        ];
+
+        return supabase
+          .from('user_dokumen')
+          .update({
+            status_verifikasi: status,
+            catatan_admin: batchNote || `Batch ${status === 'verified' ? 'verifikasi' : 'penolakan'}`,
+            verified_at: status === 'verified' ? new Date().toISOString() : null,
+            catatan_history: newHistory
+          })
+          .eq('id', docId);
+      });
+
+      await Promise.all(updatePromises);
+
+      toast({
+        title: "Berhasil",
+        description: `${selectedDocs.size} dokumen berhasil ${status === 'verified' ? 'diverifikasi' : 'ditolak'}`,
+      });
+      
+      setSelectedDocs(new Set());
+      setBatchNote("");
+      fetchUserDocuments();
+    } catch (error) {
+      console.error('Error updating documents:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui dokumen",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'verified':
@@ -249,6 +335,58 @@ export default function ReviewDokumenDetail() {
           </p>
         </div>
 
+        {documents.length > 0 && (
+          <Card className="mb-4 bg-muted/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedDocs.size === documents.length && documents.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                    <span className="text-sm font-medium">
+                      {selectedDocs.size > 0 ? `${selectedDocs.size} dipilih` : 'Pilih Semua'}
+                    </span>
+                  </div>
+                  
+                  {selectedDocs.size > 0 && (
+                    <Textarea
+                      placeholder="Catatan untuk batch action (opsional)"
+                      value={batchNote}
+                      onChange={(e) => setBatchNote(e.target.value)}
+                      className="h-9 min-h-9 w-64"
+                    />
+                  )}
+                </div>
+
+                {selectedDocs.size > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleBatchUpdate('verified')}
+                      disabled={updating === 'batch'}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Verifikasi {selectedDocs.size} Dokumen
+                    </Button>
+                    <Button
+                      onClick={() => handleBatchUpdate('rejected')}
+                      disabled={updating === 'batch'}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Tolak {selectedDocs.size} Dokumen
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {documents.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
@@ -263,7 +401,11 @@ export default function ReviewDokumenDetail() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <Checkbox
+                          checked={selectedDocs.has(doc.id)}
+                          onCheckedChange={() => toggleDocSelection(doc.id)}
+                        />
                         <CardTitle className="text-lg">{doc.dokumen.nama_dokumen}</CardTitle>
                         {getStatusBadge(doc.status_verifikasi)}
                       </div>

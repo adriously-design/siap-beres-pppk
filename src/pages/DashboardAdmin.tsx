@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen, ArrowRight } from "lucide-react";
+import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen, ArrowRight, History } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface AdminStats {
@@ -214,7 +214,7 @@ export default function DashboardAdmin() {
         </div>
 
         {/* Action Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card 
             className="hover:shadow-md transition-shadow cursor-pointer"
             onClick={() => navigate("/review-dokumen")}
@@ -272,6 +272,24 @@ export default function DashboardAdmin() {
             <CardContent>
               <Button variant="outline" className="w-full">
                 Kelola Konten
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/riwayat-aktivitas")}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-muted-foreground" />
+                Riwayat Aktivitas
+              </CardTitle>
+              <CardDescription>
+                Lihat semua aksi verifikasi dokumen
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" className="w-full">
+                Lihat Riwayat
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </CardContent>

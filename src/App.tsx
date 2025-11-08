@@ -17,6 +17,7 @@ import EBimtek from "./pages/EBimtek";
 import KelolaEBimtek from "./pages/KelolaEBimtek";
 import ReviewDokumen from "./pages/ReviewDokumen";
 import ReviewDokumenDetail from "./pages/ReviewDokumenDetail";
+import RiwayatAktivitas from "./pages/RiwayatAktivitas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -94,6 +95,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin_bkd']}>
                   <ReviewDokumenDetail />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/riwayat-aktivitas" 
+              element={
+                <ProtectedRoute allowedRoles={['admin_bkd']}>
+                  <RiwayatAktivitas />
                 </ProtectedRoute>
               } 
             />
