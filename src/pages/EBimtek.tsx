@@ -54,8 +54,11 @@ const EBimtek = () => {
   };
 
   const getIconByType = (type: string) => {
-    switch (type) {
+    const lowerType = type.toLowerCase();
+    switch (lowerType) {
       case 'text':
+      case 'faq':
+      case 'snippet':
         return <HelpCircle className="h-6 w-6 text-primary" />;
       case 'video':
         return <Video className="h-6 w-6 text-accent" />;
@@ -69,64 +72,72 @@ const EBimtek = () => {
   };
 
   const renderContent = (item: EBimtekItem) => {
-    switch (item.tipe_konten) {
-      case 'text':
-        return (
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value={item.id}>
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-3">
-                  {getIconByType(item.tipe_konten)}
-                  <span className="font-semibold">{item.judul}</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.konten}</p>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        );
-      
-      case 'video':
-      case 'pdf':
-      case 'link':
-        return (
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {getIconByType(item.tipe_konten)}
-                  <div>
-                    <CardTitle className="text-lg">{item.judul}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {item.tipe_konten === 'video' && 'Video Tutorial'}
-                      {item.tipe_konten === 'pdf' && 'Dokumen PDF'}
-                      {item.tipe_konten === 'link' && 'Link External'}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => window.open(item.konten, '_blank')}
-                  variant="outline"
-                  size="sm"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Buka
-                </Button>
+    const lowerType = item.tipe_konten.toLowerCase();
+    
+    // Text-based content (FAQ, Snippet, text)
+    if (lowerType === 'text' || lowerType === 'faq' || lowerType === 'snippet') {
+      return (
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value={item.id}>
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-3">
+                {getIconByType(item.tipe_konten)}
+                <span className="font-semibold">{item.judul}</span>
               </div>
-            </CardHeader>
-          </Card>
-        );
-      
-      default:
-        return null;
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.konten}</p>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      );
     }
+    
+    // Resource-based content (video, pdf, link)
+    if (lowerType === 'video' || lowerType === 'pdf' || lowerType === 'link') {
+      return (
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {getIconByType(item.tipe_konten)}
+                <div>
+                  <CardTitle className="text-lg">{item.judul}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {lowerType === 'video' && 'Video Tutorial'}
+                    {lowerType === 'pdf' && 'Dokumen PDF'}
+                    {lowerType === 'link' && 'Link External'}
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => window.open(item.konten, '_blank')}
+                variant="outline"
+                size="sm"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Buka
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      );
+    }
+    
+    return null;
   };
 
-  const faqItems = items.filter(item => item.tipe_konten === 'text');
-  const resourceItems = items.filter(item => ['video', 'pdf', 'link'].includes(item.tipe_konten));
+  const faqItems = items.filter(item => {
+    const lowerType = item.tipe_konten.toLowerCase();
+    return lowerType === 'text' || lowerType === 'faq' || lowerType === 'snippet';
+  });
+  
+  const resourceItems = items.filter(item => {
+    const lowerType = item.tipe_konten.toLowerCase();
+    return lowerType === 'video' || lowerType === 'pdf' || lowerType === 'link';
+  });
 
   return (
     <div className="min-h-screen bg-background">

@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowLeft, Loader2, Eye, ExternalLink } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -31,6 +32,7 @@ const KelolaEBimtek = () => {
   const [editingItem, setEditingItem] = useState<EBimtekItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [formData, setFormData] = useState({
     judul: "",
     konten: "",
@@ -279,6 +281,10 @@ const KelolaEBimtek = () => {
                     </div>
 
                     <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setPreviewOpen(true)} className="flex-1">
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </Button>
                       <Button onClick={handleSubmit} className="flex-1">
                         {editingItem ? 'Perbarui' : 'Simpan'}
                       </Button>
@@ -348,6 +354,65 @@ const KelolaEBimtek = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Preview Konten</DialogTitle>
+              <DialogDescription>
+                Ini adalah tampilan yang akan dilihat oleh calon PPPK
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {formData.tipe_konten === 'text' ? (
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="preview">
+                    <AccordionTrigger className="hover:no-underline">
+                      <span className="font-semibold">{formData.judul || 'Judul Preview'}</span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {formData.konten || 'Konten akan muncul di sini...'}
+                        </p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">{formData.judul || 'Judul Preview'}</CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {formData.tipe_konten === 'video' && 'Video Tutorial'}
+                          {formData.tipe_konten === 'pdf' && 'Dokumen PDF'}
+                          {formData.tipe_konten === 'link' && 'Link External'}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => formData.konten && window.open(formData.konten, '_blank')}
+                        variant="outline"
+                        size="sm"
+                        disabled={!formData.konten}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Buka
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  {formData.konten && (
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">URL: {formData.konten}</p>
+                    </CardContent>
+                  )}
+                </Card>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
