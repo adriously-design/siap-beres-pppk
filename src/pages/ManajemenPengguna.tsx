@@ -32,7 +32,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Eye, Edit, Trash2, ArrowLeft } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Plus, Eye, Edit, Trash2, ArrowLeft, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ImportUserDialog } from "@/components/ImportUserDialog";
 import { Navbar } from "@/components/Navbar";
@@ -42,6 +44,7 @@ interface UserProfile {
   full_name: string;
   nik: string | null;
   no_peserta: string | null;
+  role?: 'calon_pppk' | 'admin_bkd';
 }
 
 const ManajemenPengguna = () => {
@@ -56,6 +59,7 @@ const ManajemenPengguna = () => {
     no_peserta: "",
     nik: "",
     full_name: "",
+    role: "calon_pppk" as 'calon_pppk' | 'admin_bkd',
   });
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -69,11 +73,20 @@ const ManajemenPengguna = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          *,
+          user_roles!inner(role)
+        `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setUsers(data || []);
+      
+      const usersWithRoles = data?.map(user => ({
+        ...user,
+        role: (user.user_roles as any)?.[0]?.role || 'calon_pppk'
+      })) || [];
+      
+      setUsers(usersWithRoles);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -102,7 +115,8 @@ const ManajemenPengguna = () => {
           userData: {
             no_peserta: formData.no_peserta,
             nik: formData.nik,
-            full_name: formData.full_name
+            full_name: formData.full_name,
+            role: formData.role
           }
         },
       });
@@ -125,7 +139,7 @@ const ManajemenPengguna = () => {
         });
       }
 
-      setFormData({ no_peserta: "", nik: "", full_name: "" });
+      setFormData({ no_peserta: "", nik: "", full_name: "", role: "calon_pppk" });
       setAddDialogOpen(false);
       fetchUsers();
     } catch (error: any) {
@@ -149,7 +163,8 @@ const ManajemenPengguna = () => {
             no_peserta: formData.no_peserta,
             nik: formData.nik,
             full_name: formData.full_name
-          }
+          },
+          role: formData.role
         },
       });
 
@@ -206,6 +221,7 @@ const ManajemenPengguna = () => {
       no_peserta: user.no_peserta || "",
       nik: user.nik || "",
       full_name: user.full_name,
+      role: user.role || "calon_pppk",
     });
     setEditDialogOpen(true);
   };
@@ -280,6 +296,28 @@ const ManajemenPengguna = () => {
                           onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-role">Role</Label>
+                        <Select 
+                          value={formData.role} 
+                          onValueChange={(value: 'calon_pppk' | 'admin_bkd') => 
+                            setFormData({ ...formData, role: value })
+                          }
+                        >
+                          <SelectTrigger id="add-role">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="calon_pppk">Calon PPPK</SelectItem>
+                            <SelectItem value="admin_bkd">
+                              <div className="flex items-center">
+                                <Shield className="h-4 w-4 mr-2" />
+                                Admin BKD
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
@@ -304,13 +342,14 @@ const ManajemenPengguna = () => {
                     <TableHead>No Peserta</TableHead>
                     <TableHead>NIK</TableHead>
                     <TableHead>Nama Lengkap</TableHead>
+                    <TableHead>Role</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
                         Belum ada data user
                       </TableCell>
                     </TableRow>
@@ -320,6 +359,15 @@ const ManajemenPengguna = () => {
                         <TableCell>{user.no_peserta || "-"}</TableCell>
                         <TableCell>{user.nik || "-"}</TableCell>
                         <TableCell>{user.full_name}</TableCell>
+                        <TableCell>
+                          <Badge variant={user.role === 'admin_bkd' ? 'destructive' : 'default'}>
+                            {user.role === 'admin_bkd' ? (
+                              <><Shield className="h-3 w-3 mr-1" /> Admin BKD</>
+                            ) : (
+                              'Calon PPPK'
+                            )}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -374,6 +422,16 @@ const ManajemenPengguna = () => {
                   <Label className="text-muted-foreground">Nama Lengkap</Label>
                   <p className="font-medium">{selectedUser.full_name}</p>
                 </div>
+                <div>
+                  <Label className="text-muted-foreground">Role</Label>
+                  <Badge variant={selectedUser.role === 'admin_bkd' ? 'destructive' : 'default'}>
+                    {selectedUser.role === 'admin_bkd' ? (
+                      <><Shield className="h-3 w-3 mr-1" /> Admin BKD</>
+                    ) : (
+                      'Calon PPPK'
+                    )}
+                  </Badge>
+                </div>
               </div>
             )}
             <DialogFooter>
@@ -416,6 +474,28 @@ const ManajemenPengguna = () => {
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-role">Role</Label>
+                <Select 
+                  value={formData.role} 
+                  onValueChange={(value: 'calon_pppk' | 'admin_bkd') => 
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger id="edit-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="calon_pppk">Calon PPPK</SelectItem>
+                    <SelectItem value="admin_bkd">
+                      <div className="flex items-center">
+                        <Shield className="h-4 w-4 mr-2" />
+                        Admin BKD
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>

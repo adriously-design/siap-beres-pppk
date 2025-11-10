@@ -9,6 +9,7 @@ interface UserData {
   no_peserta: string;
   nik: string;
   full_name: string;
+  role?: 'calon_pppk' | 'admin_bkd';
 }
 
 // Generate a strong random password
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { action, userData, userId } = await req.json();
+    const { action, userData, userId, role } = await req.json();
 
     switch (action) {
       case 'create': {
@@ -126,8 +127,14 @@ Deno.serve(async (req) => {
         }
 
         const sanitizedData = validation.sanitized!;
+        const userRole = role || userData.role || 'calon_pppk';
         const email = `${sanitizedData.no_peserta}@pppk.local`;
         const password = generateStrongPassword();
+
+        // Validate admin assignment
+        if (userRole === 'admin_bkd') {
+          console.log('Creating new admin user');
+        }
 
         const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
           email,
@@ -146,6 +153,17 @@ Deno.serve(async (req) => {
             JSON.stringify({ error: authError.message }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+
+        // Set user role
+        const { error: roleError } = await supabaseClient
+          .from('user_roles')
+          .update({ role: userRole })
+          .eq('user_id', authData.user.id);
+
+        if (roleError) {
+          console.error('Error setting role:', roleError);
+          // Don't fail, just log - trigger will set default role
         }
 
         return new Response(
@@ -176,6 +194,14 @@ Deno.serve(async (req) => {
 
         const sanitizedData = validation.sanitized!;
 
+        // Prevent admin from lowering their own role
+        if (role && role !== 'admin_bkd' && userId === user.id) {
+          return new Response(
+            JSON.stringify({ error: 'Anda tidak dapat menurunkan role Anda sendiri' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const { error: updateError } = await supabaseClient
           .from('profiles')
           .update({
@@ -193,6 +219,22 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Update role if provided
+        if (role) {
+          const { error: roleError } = await supabaseClient
+            .from('user_roles')
+            .update({ role })
+            .eq('user_id', userId);
+
+          if (roleError) {
+            console.error('Error updating role:', roleError);
+            return new Response(
+              JSON.stringify({ error: roleError.message }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
         return new Response(
           JSON.stringify({ success: true, message: 'User berhasil diupdate' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -204,6 +246,25 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({ error: 'User ID diperlukan' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if this is the last admin
+        const { data: adminCount } = await supabaseClient
+          .from('user_roles')
+          .select('user_id', { count: 'exact' })
+          .eq('role', 'admin_bkd');
+
+        const { data: userRole } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .single();
+
+        if (userRole?.role === 'admin_bkd' && adminCount && adminCount.length <= 1) {
+          return new Response(
+            JSON.stringify({ error: 'Tidak dapat menghapus admin terakhir. Sistem harus memiliki minimal 1 admin.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
