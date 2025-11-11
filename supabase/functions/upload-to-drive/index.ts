@@ -137,7 +137,7 @@ serve(async (req) => {
       throw new Error('Missing R2 configuration');
     }
 
-    // Generate unique file path
+    // Generate unique file path (store path only, not full URL)
     const timestamp = new Date().getTime();
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `dokumen/${user.id}/${timestamp}_${sanitizedFileName}`;
@@ -245,9 +245,6 @@ serve(async (req) => {
 
     console.log('File uploaded to R2:', filePath);
 
-    // Generate public URL
-    const filePublicUrl = `${publicUrl}/${filePath}`;
-
     // Check if user already has this document
     const { data: existingDoc } = await supabase
       .from('user_dokumen')
@@ -259,7 +256,8 @@ serve(async (req) => {
     if (existingDoc) {
       // Delete old file from R2 if exists
       if (existingDoc.file_path) {
-        const oldFilePath = existingDoc.file_path.replace(publicUrl + '/', '');
+        // file_path is already a path (not full URL) after migration
+        const oldFilePath = existingDoc.file_path;
         try {
           const deleteUrl = new URL(`/${bucketName}/${oldFilePath}`, endpoint);
           const deleteHeaders: Record<string, string> = {
@@ -299,12 +297,12 @@ serve(async (req) => {
           ]
         : existingHistory;
 
-      // Update existing record
+      // Update existing record - store path only, not full URL
       const { error: updateError } = await supabase
         .from('user_dokumen')
         .update({
           file_name: fileName,
-          file_path: filePublicUrl,
+          file_path: filePath, // Store path only
           file_size_kb: fileSizeKb,
           status_verifikasi: 'pending',
           uploaded_at: new Date().toISOString(),
@@ -318,7 +316,7 @@ serve(async (req) => {
       if (updateError) throw updateError;
       console.log('Document updated in database');
     } else {
-      // Insert new record
+      // Insert new record - store path only, not full URL
       const historyEntry = userNote?.trim() ? [{
         type: 'user',
         message: userNote,
@@ -331,7 +329,7 @@ serve(async (req) => {
           user_id: user.id,
           dokumen_id: dokumenId,
           file_name: fileName,
-          file_path: filePublicUrl,
+          file_path: filePath, // Store path only
           file_size_kb: fileSizeKb,
           status_verifikasi: 'pending',
           catatan_user: userNote || null,
@@ -346,7 +344,6 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         filePath,
-        publicUrl: filePublicUrl,
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

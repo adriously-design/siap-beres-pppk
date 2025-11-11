@@ -152,8 +152,16 @@ serve(async (req) => {
       throw new Error('Missing R2 configuration');
     }
 
-    // Extract file path from URL
-    const filePath = userDoc.file_path.replace(publicUrl + '/', '');
+    // Extract file path (handle both legacy full URLs and new path-only format)
+    let filePath: string;
+    if (userDoc.file_path.startsWith('http')) {
+      // Legacy format: full URL
+      filePath = userDoc.file_path.replace(publicUrl + '/', '');
+    } else {
+      // New format: path only
+      filePath = userDoc.file_path;
+    }
+    
     if (!filePath) {
       throw new Error('Invalid file path');
     }

@@ -75,7 +75,7 @@ const ManajemenPengguna = () => {
         .from("profiles")
         .select(`
           *,
-          user_roles!user_id(role)
+          user_roles(role)
         `)
         .order("created_at", { ascending: false });
 
