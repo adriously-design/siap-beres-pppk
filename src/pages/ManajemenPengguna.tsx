@@ -75,14 +75,17 @@ const ManajemenPengguna = () => {
         .from("profiles")
         .select(`
           *,
-          user_roles!inner(role)
+          user_roles(role)
         `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       
       const usersWithRoles = data?.map(user => ({
-        ...user,
+        id: user.id,
+        full_name: user.full_name,
+        nik: user.nik,
+        no_peserta: user.no_peserta,
         role: (user.user_roles as any)?.[0]?.role || 'calon_pppk'
       })) || [];
       
