@@ -4,32 +4,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Mail, Phone, Youtube, Instagram } from "lucide-react";
 import heroImage from "@/assets/hero-recruitment.jpg";
 import logoNTT from "@/assets/logo-ntt.png";
-
 const Index = () => {
   const navigate = useNavigate();
-
-  return (
-    <div className="min-h-screen flex flex-col">
+  return <div className="min-h-screen flex flex-col">
       {/* Navbar */}
       <nav className="bg-primary text-primary-foreground shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img 
-                src={logoNTT} 
-                alt="Logo Provinsi NTT" 
-                className="w-12 h-12 object-contain"
-              />
+              <img src={logoNTT} alt="Logo Provinsi NTT" className="w-12 h-12 object-contain" />
               <div>
                 <h1 className="font-bold text-lg">SIAP BERES</h1>
-                <p className="text-xs opacity-90">Sistem Informasi Administrasi PPPK Berbasis Digital</p>
+                <p className="opacity-90 text-sm">Sistem Informasi Administrasi PPPK - Berkas Sesuai</p>
               </div>
             </div>
-            <Button 
-              onClick={() => window.open('https://bkd.nttprov.go.id/', '_blank')}
-              variant="secondary"
-              size="lg"
-            >
+            <Button onClick={() => window.open('https://bkd.nttprov.go.id/', '_blank')} variant="secondary" size="lg">
               Website BKD NTT
             </Button>
           </div>
@@ -46,25 +35,15 @@ const Index = () => {
                   Selamat Datang di Portal PPPK
                 </span>
               </h2>
-              <p className="text-xl text-muted-foreground">
-                Sistem Informasi Administrasi PPPK Berbasis Digital untuk Provinsi Nusa Tenggara Timur
-              </p>
+              <p className="text-xl text-muted-foreground">Sistem Informasi Administrasi PPPK Berbasis Digital untuk PPPK di Lingkup Provinsi Nusa Tenggara Timur</p>
               <div className="flex gap-4">
-                <Button 
-                  size="lg" 
-                  onClick={() => navigate('/auth-pppk')}
-                  className="text-lg px-8"
-                >
+                <Button size="lg" onClick={() => navigate('/auth-pppk')} className="text-lg px-8">
                   Login Calon PPPK
                 </Button>
               </div>
             </div>
             <div className="relative">
-              <img 
-                src={heroImage} 
-                alt="PPPK Portal" 
-                className="rounded-2xl shadow-2xl w-full h-auto"
-              />
+              <img src={heroImage} alt="PPPK Portal" className="rounded-2xl shadow-2xl w-full h-auto" />
             </div>
           </div>
         </div>
@@ -83,9 +62,7 @@ const Index = () => {
                   </svg>
                 </div>
                 <h4 className="text-xl font-semibold text-center">Upload Dokumen</h4>
-                <p className="text-muted-foreground text-center">
-                  Upload dan kelola dokumen persyaratan PPPK dengan mudah dan aman
-                </p>
+                <p className="text-muted-foreground text-center">Upload dan kelola dokumen persyaratan pengusulan NI PPPK dengan mudah dan aman</p>
               </CardContent>
             </Card>
 
@@ -111,9 +88,7 @@ const Index = () => {
                   </svg>
                 </div>
                 <h4 className="text-xl font-semibold text-center">E-Bimtek</h4>
-                <p className="text-muted-foreground text-center">
-                  Akses materi bimbingan teknis secara online kapan saja dan dimana saja
-                </p>
+                <p className="text-muted-foreground text-center">Akses panduan teknis secara online kapan saja dan dimana saja</p>
               </CardContent>
             </Card>
           </div>
@@ -130,57 +105,35 @@ const Index = () => {
                 Bidang Perencanaan, Pendidikan dan Sistem Informasi Pegawai
               </p>
               <p className="text-sm opacity-90">
-                Jln. Raya El Tari No.52 Oebobo Kupang<br/>
+                Jln. Raya El Tari No.52 Oebobo Kupang<br />
                 Kel. Oebobo, Kec. Kota Raja, Kota Kupang, Nusa Tenggara Tim. 85111
               </p>
             </div>
             <div className="space-y-4">
               <h5 className="text-xl font-bold">Hubungi Kami</h5>
               <div className="flex flex-col gap-3">
-                <a 
-                  href="https://wa.me/6282299395149" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                >
+                <a href="https://wa.me/6282299395149" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <Phone className="w-5 h-5" />
                   <span className="text-sm">WhatsApp: +62 822-9939-5149</span>
                 </a>
-                <a 
-                  href="mailto:pengaduanpppk2024@gmail.com"
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                >
+                <a href="mailto:pengaduanpppk2024@gmail.com" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <Mail className="w-5 h-5" />
                   <span className="text-sm">pengaduanpppk2024@gmail.com</span>
                 </a>
-                <a 
-                  href="https://www.youtube.com/c/BadanKepegawaianDaerahProvinsiNTT" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                >
+                <a href="https://www.youtube.com/c/BadanKepegawaianDaerahProvinsiNTT" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <Youtube className="w-5 h-5" />
                   <span className="text-sm">YouTube BKD Provinsi NTT</span>
                 </a>
-                <a 
-                  href="https://www.instagram.com/bkdprovinsintt/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                >
+                <a href="https://www.instagram.com/bkdprovinsintt/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <Instagram className="w-5 h-5" />
                   <span className="text-sm">@bkdprovinsintt</span>
                 </a>
               </div>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-primary-foreground/20 text-center text-sm opacity-75">
-            © 2025 - Sub Bidang Perencanaan Formasi
-          </div>
+          <div className="mt-8 pt-8 border-t border-primary-foreground/20 text-center text-sm opacity-75">© 2025 - Bidang Perencanaan, Pendidikan dan SIstem Informasi Pegawai</div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
