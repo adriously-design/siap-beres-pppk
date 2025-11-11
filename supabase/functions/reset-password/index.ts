@@ -13,6 +13,18 @@ interface ResetPasswordRequest {
   new_password: string;
 }
 
+// Helper function untuk sanitize error messages
+function getSafeErrorMessage(error: any): string {
+  const message = error?.message?.toLowerCase() || '';
+  if (message.includes('rate') || message.includes('too many')) {
+    return 'Terlalu banyak percobaan. Silakan coba lagi nanti.';
+  }
+  if (message.includes('not found') || message.includes('invalid')) {
+    return 'Data tidak ditemukan atau tidak valid.';
+  }
+  return 'Terjadi kesalahan sistem. Silakan coba lagi.';
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -30,7 +42,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
     if (!/^\d{16}$/.test(nik)) {
       return new Response(
-        JSON.stringify({ error: 'NIK harus 16 digit angka' }),
+        JSON.stringify({ error: 'Format data tidak valid' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -48,22 +60,74 @@ const handler = async (req: Request): Promise<Response> => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // 1. Cari profil di tabel 'profiles'
-    const { data: profiles, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, no_peserta, nik, full_name, status_aktivasi')
-      .eq('no_peserta', no_peserta)
-      .eq('nik', nik);
+    // ============ RATE LIMITING ============
+    // Identifier: kombinasi NIK + no_peserta untuk mencegah brute force
+    const rateLimitIdentifier = `reset-pwd:${nik}:${no_peserta}`;
+    
+    console.log(`Rate limit check for: ${rateLimitIdentifier}`);
+    
+    const { data: rateLimitResult, error: rateLimitError } = await supabaseAdmin.rpc('check_rate_limit', {
+      p_identifier: rateLimitIdentifier,
+      p_endpoint: 'reset-password',
+      p_max_attempts: 3, // Hanya 3 percobaan
+      p_window_minutes: 60 // Per 60 menit (1 jam)
+    });
 
-    if (profileError) throw profileError;
-    if (!profiles || profiles.length === 0) {
+    if (rateLimitError) {
+      console.error('Rate limit check error:', rateLimitError);
+      // Tetap lanjutkan jika rate limit check gagal (fail-open untuk availability)
+    } else if (rateLimitResult && !rateLimitResult.allowed) {
+      console.warn(`Rate limit exceeded for: ${rateLimitIdentifier}`);
       return new Response(
-        JSON.stringify({ error: 'No Peserta atau NIK tidak sesuai' }),
+        JSON.stringify({ 
+          error: 'Terlalu banyak percobaan. Silakan coba lagi nanti.',
+          reset_at: rateLimitResult.reset_at
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Rate limit passed. Attempts remaining: ${rateLimitResult?.attempts_remaining}`);
+
+    // ============ VERIFIKASI KREDENSIAL DENGAN SECURITY DEFINER FUNCTION ============
+    // Menggunakan function yang hanya return boolean, tidak expose PII
+    const { data: isValid, error: verifyError } = await supabaseAdmin.rpc('verify_credentials', {
+      p_no_peserta: no_peserta,
+      p_nik: nik
+    });
+
+    if (verifyError) {
+      console.error('Credential verification error:', verifyError);
+      return new Response(
+        JSON.stringify({ error: getSafeErrorMessage(verifyError) }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!isValid) {
+      console.log('Invalid credentials provided');
+      return new Response(
+        JSON.stringify({ error: 'Data tidak ditemukan atau tidak sesuai' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const profile = profiles[0];
+    console.log('Credentials verified successfully');
+
+    // Ambil data profile untuk keperluan aktivasi (setelah verifikasi berhasil)
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, no_peserta, full_name, status_aktivasi')
+      .eq('no_peserta', no_peserta)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('Profile fetch error:', profileError);
+      return new Response(
+        JSON.stringify({ error: getSafeErrorMessage(profileError) }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // --- INI LOGIKA YANG DIPERBAIKI ---
 
@@ -78,12 +142,16 @@ const handler = async (req: Request): Promise<Response> => {
       if (updateError) {
         console.error('Error updating password (user aktif):', updateError);
         return new Response(
-          JSON.stringify({ error: 'Gagal mengubah password. ' + updateError.message }),
+          JSON.stringify({ error: getSafeErrorMessage(updateError) }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       console.log('Password updated for existing user:', profile.id);
+      
+      // TODO: Kirim notifikasi email ke user bahwa password berhasil diubah
+      // Memerlukan integrasi dengan Resend atau SMTP
+      
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -103,7 +171,7 @@ const handler = async (req: Request): Promise<Response> => {
         user_metadata: {
           full_name: profile.full_name,
           no_peserta: profile.no_peserta,
-          nik: profile.nik,
+          nik: nik, // Gunakan NIK dari input (sudah divalidasi)
           role: 'calon_pppk'
         }
       });
@@ -111,7 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
       if (createError) {
         console.error('Error creating user (aktivasi):', createError);
         return new Response(
-          JSON.stringify({ error: 'Gagal membuat akun. ' + createError.message }),
+          JSON.stringify({ error: getSafeErrorMessage(createError) }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -129,14 +197,17 @@ const handler = async (req: Request): Promise<Response> => {
       if (profileUpdateError) {
         console.error('User auth dibuat, TAPI GAGAL update profil:', profileUpdateError);
         // Jika ini gagal, user auth tetap dibuat, tapi status aktivasi di profil masih false
-        // Ini adalah error kritis yang perlu ditangani, tapi kita tetap beri tahu user
         return new Response(
-          JSON.stringify({ error: 'Gagal sinkronisasi profil, hubungi admin. ' + profileUpdateError.message }),
+          JSON.stringify({ error: getSafeErrorMessage(profileUpdateError) }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       console.log('First time activation successful for user:', newUser.user.id);
+      
+      // TODO: Kirim notifikasi email selamat datang
+      // Memerlukan integrasi dengan Resend atau SMTP
+      
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -151,7 +222,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error) {
     console.error('Error in reset-password function:', error);
     return new Response(
-      JSON.stringify({ error: 'Terjadi kesalahan server: ' + (error instanceof Error ? error.message : 'Unknown error') }),
+      JSON.stringify({ error: getSafeErrorMessage(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

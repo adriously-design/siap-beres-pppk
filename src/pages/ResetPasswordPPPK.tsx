@@ -47,29 +47,26 @@ const ResetPasswordPPPK = () => {
     try {
       const validated = verifySchema.parse(verifyData);
       
-      // Verify by checking if profile exists in database
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('no_peserta, nik, status_aktivasi')
-        .eq('no_peserta', validated.no_peserta)
-        .eq('nik', validated.nik)
-        .maybeSingle();
+      // Verify credentials using secure RPC function (tidak expose PII)
+      const { data: isValid, error } = await supabase.rpc('verify_credentials', {
+        p_no_peserta: validated.no_peserta,
+        p_nik: validated.nik
+      });
 
       if (error) {
+        console.error('RPC verification error:', error);
         throw new Error('Terjadi kesalahan sistem');
       }
 
-      if (!profile) {
-        throw new Error('No Peserta atau NIK tidak sesuai');
+      if (!isValid) {
+        throw new Error('Data tidak ditemukan atau tidak sesuai');
       }
 
       // Verification successful
       setStep('reset');
       toast({
         title: "Verifikasi Berhasil",
-        description: profile.status_aktivasi 
-          ? "Silahkan masukkan password baru Anda"
-          : "Silahkan buat password untuk aktivasi akun Anda",
+        description: "Silahkan masukkan password baru Anda",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

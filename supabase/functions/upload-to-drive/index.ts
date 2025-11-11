@@ -145,6 +145,62 @@ serve(async (req) => {
     // Convert base64 to binary
     const binaryData = Uint8Array.from(atob(fileBase64), c => c.charCodeAt(0));
 
+    // ============ SERVER-SIDE FILE VALIDATION (FIX ISU #3) ============
+    console.log('Validating file...');
+    
+    // 1. Validate file size server-side (maximum 5MB = 5120KB)
+    const maxSizeKb = 5120;
+    if (fileSizeKb > maxSizeKb) {
+      throw new Error(`Ukuran file terlalu besar. Maksimal ${maxSizeKb / 1024}MB`);
+    }
+    
+    // Validate actual binary size matches reported size
+    const actualSizeKb = Math.ceil(binaryData.length / 1024);
+    if (Math.abs(actualSizeKb - fileSizeKb) > 10) { // Allow 10KB tolerance
+      console.warn(`File size mismatch: reported=${fileSizeKb}KB, actual=${actualSizeKb}KB`);
+    }
+
+    // 2. Validate PDF signature (magic bytes)
+    // PDF files must start with %PDF (hex: 25 50 44 46)
+    const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
+    const isPdfBySignature = pdfSignature.every((byte, index) => binaryData[index] === byte);
+    
+    if (!isPdfBySignature) {
+      console.error('Invalid PDF signature. First 8 bytes:', Array.from(binaryData.slice(0, 8)));
+      throw new Error('File bukan PDF yang valid. Upload gagal untuk keamanan.');
+    }
+    
+    // 3. Validate MIME type matches PDF
+    if (!mimeType.includes('pdf')) {
+      throw new Error('Tipe file tidak valid. Hanya PDF yang diperbolehkan.');
+    }
+    
+    // 4. Additional PDF structure validation
+    // Check if file contains PDF trailer (should have %%EOF near end)
+    const fileEnd = new TextDecoder().decode(binaryData.slice(-1024)); // Last 1KB
+    if (!fileEnd.includes('%%EOF')) {
+      console.warn('PDF file might be corrupted: missing %%EOF marker');
+      // Don't block, but log warning
+    }
+    
+    console.log('File validation passed: PDF signature valid, size OK');
+
+    // ============ RATE LIMITING FOR UPLOADS ============
+    const uploadIdentifier = `upload:${user.id}`;
+    const { data: uploadRateLimit, error: rateLimitError } = await supabase.rpc('check_rate_limit', {
+      p_identifier: uploadIdentifier,
+      p_endpoint: 'upload-file',
+      p_max_attempts: 10, // 10 uploads per hour per user
+      p_window_minutes: 60
+    });
+
+    if (rateLimitError) {
+      console.error('Upload rate limit check error:', rateLimitError);
+      // Continue if rate limit check fails
+    } else if (uploadRateLimit && !uploadRateLimit.allowed) {
+      throw new Error('Terlalu banyak upload. Silakan coba lagi nanti.');
+    }
+
     console.log('Uploading file to R2...');
     
     // Prepare R2 upload using AWS Signature V4
