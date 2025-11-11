@@ -33,8 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Eye, Edit, Trash2, ArrowLeft, Shield } from "lucide-react";
+import { Loader2, Eye, Trash2, ArrowLeft, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ImportUserDialog } from "@/components/ImportUserDialog";
 import { Navbar } from "@/components/Navbar";
@@ -52,14 +51,12 @@ const ManajemenPengguna = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    no_peserta: "",
-    nik: "",
-    full_name: "",
-    role: "calon_pppk" as 'calon_pppk' | 'admin_bkd',
+  const [addAdminDialogOpen, setAddAdminDialogOpen] = useState(false);
+  const [adminFormData, setAdminFormData] = useState({
+    email: "",
+    password: "",
+    verification_key: "",
   });
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -71,23 +68,31 @@ const ManajemenPengguna = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select(`
-          *,
-          user_roles(role)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      
-      const usersWithRoles = data?.map(user => ({
-        id: user.id,
-        full_name: user.full_name,
-        nik: user.nik,
-        no_peserta: user.no_peserta,
-        role: (user.user_roles as any)?.[0]?.role || 'calon_pppk'
-      })) || [];
+      if (profilesError) throw profilesError;
+
+      // Fetch roles separately
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      if (rolesError) throw rolesError;
+
+      // Map roles to profiles
+      const usersWithRoles = profilesData?.map(profile => {
+        const userRole = rolesData?.find(r => r.user_id === profile.id);
+        return {
+          id: profile.id,
+          full_name: profile.full_name,
+          nik: profile.nik,
+          no_peserta: profile.no_peserta,
+          role: (userRole?.role as 'calon_pppk' | 'admin_bkd') || 'calon_pppk'
+        };
+      }) || [];
       
       setUsers(usersWithRoles);
     } catch (error: any) {
@@ -101,8 +106,8 @@ const ManajemenPengguna = () => {
     }
   };
 
-  const handleAdd = async () => {
-    if (!formData.no_peserta || !formData.nik || !formData.full_name) {
+  const handleAddAdmin = async () => {
+    if (!adminFormData.email || !adminFormData.password || !adminFormData.verification_key) {
       toast({
         title: "Error",
         description: "Semua field harus diisi",
@@ -114,36 +119,22 @@ const ManajemenPengguna = () => {
     try {
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
         body: { 
-          action: 'create',
-          userData: {
-            no_peserta: formData.no_peserta,
-            nik: formData.nik,
-            full_name: formData.full_name,
-            role: formData.role
-          }
+          action: 'create_admin',
+          email: adminFormData.email,
+          password: adminFormData.password,
+          verification_key: adminFormData.verification_key,
         },
       });
 
       if (error) throw error;
 
-      // Show password to admin
       toast({
         title: "Sukses",
-        description: `User berhasil ditambahkan. Password: ${data.password}`,
-        duration: 10000,
+        description: "Admin baru berhasil dibuat",
       });
 
-      // Also prompt to copy password
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(data.password);
-        toast({
-          title: "Password disalin",
-          description: "Password telah disalin ke clipboard",
-        });
-      }
-
-      setFormData({ no_peserta: "", nik: "", full_name: "", role: "calon_pppk" });
-      setAddDialogOpen(false);
+      setAdminFormData({ email: "", password: "", verification_key: "" });
+      setAddAdminDialogOpen(false);
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -154,40 +145,6 @@ const ManajemenPengguna = () => {
     }
   };
 
-  const handleEdit = async () => {
-    if (!selectedUser) return;
-
-    try {
-      const { data, error } = await supabase.functions.invoke('admin-user-management', {
-        body: { 
-          action: 'update',
-          userId: selectedUser.id,
-          userData: {
-            no_peserta: formData.no_peserta,
-            nik: formData.nik,
-            full_name: formData.full_name
-          },
-          role: formData.role
-        },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Sukses",
-        description: "Data user berhasil diupdate",
-      });
-
-      setEditDialogOpen(false);
-      fetchUsers();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleDelete = async () => {
     if (!selectedUser) return;
@@ -216,17 +173,6 @@ const ManajemenPengguna = () => {
         variant: "destructive",
       });
     }
-  };
-
-  const openEditDialog = (user: UserProfile) => {
-    setSelectedUser(user);
-    setFormData({
-      no_peserta: user.no_peserta || "",
-      nik: user.nik || "",
-      full_name: user.full_name,
-      role: user.role || "calon_pppk",
-    });
-    setEditDialogOpen(true);
   };
 
   const openViewDialog = (user: UserProfile) => {
@@ -259,74 +205,57 @@ const ManajemenPengguna = () => {
               </div>
               <div className="flex gap-2">
                 <ImportUserDialog />
-                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+                <Dialog open={addAdminDialogOpen} onOpenChange={setAddAdminDialogOpen}>
                   <DialogTrigger asChild>
                     <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Tambah Manual
+                      <Shield className="h-4 w-4 mr-2" />
+                      Tambah Admin
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Tambah User Calon PPPK</DialogTitle>
+                      <DialogTitle>Tambah Admin Baru</DialogTitle>
                       <DialogDescription>
-                        Masukkan data user baru secara manual
+                        Masukkan data admin baru dengan kata kunci verifikasi
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="add-no-peserta">No Peserta</Label>
+                        <Label htmlFor="admin-email">Email</Label>
                         <Input
-                          id="add-no-peserta"
-                          value={formData.no_peserta}
-                          onChange={(e) => setFormData({ ...formData, no_peserta: e.target.value })}
+                          id="admin-email"
+                          type="email"
+                          value={adminFormData.email}
+                          onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
+                          placeholder="admin@bkd.id"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="add-nik">NIK (16 Digit)</Label>
+                        <Label htmlFor="admin-password">Password</Label>
                         <Input
-                          id="add-nik"
-                          value={formData.nik}
-                          onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
-                          maxLength={16}
+                          id="admin-password"
+                          type="password"
+                          value={adminFormData.password}
+                          onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
+                          placeholder="Minimal 8 karakter"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="add-nama">Nama Lengkap</Label>
+                        <Label htmlFor="verification-key">Kata Kunci Verifikasi</Label>
                         <Input
-                          id="add-nama"
-                          value={formData.full_name}
-                          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                          id="verification-key"
+                          type="password"
+                          value={adminFormData.verification_key}
+                          onChange={(e) => setAdminFormData({ ...adminFormData, verification_key: e.target.value })}
+                          placeholder="Masukkan kata kunci verifikasi"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="add-role">Role</Label>
-                        <Select 
-                          value={formData.role} 
-                          onValueChange={(value: 'calon_pppk' | 'admin_bkd') => 
-                            setFormData({ ...formData, role: value })
-                          }
-                        >
-                          <SelectTrigger id="add-role">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="calon_pppk">Calon PPPK</SelectItem>
-                            <SelectItem value="admin_bkd">
-                              <div className="flex items-center">
-                                <Shield className="h-4 w-4 mr-2" />
-                                Admin BKD
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+                      <Button variant="outline" onClick={() => setAddAdminDialogOpen(false)}>
                         Batal
                       </Button>
-                      <Button onClick={handleAdd}>Tambah</Button>
+                      <Button onClick={handleAddAdmin}>Tambah Admin</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -383,13 +312,6 @@ const ManajemenPengguna = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => openEditDialog(user)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
                               onClick={() => openDeleteDialog(user)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
@@ -439,73 +361,6 @@ const ManajemenPengguna = () => {
             )}
             <DialogFooter>
               <Button onClick={() => setViewDialogOpen(false)}>Tutup</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Dialog */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit User</DialogTitle>
-              <DialogDescription>
-                Update data user Calon PPPK
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-no-peserta">No Peserta</Label>
-                <Input
-                  id="edit-no-peserta"
-                  value={formData.no_peserta}
-                  onChange={(e) => setFormData({ ...formData, no_peserta: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-nik">NIK (16 Digit)</Label>
-                <Input
-                  id="edit-nik"
-                  value={formData.nik}
-                  onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
-                  maxLength={16}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-nama">Nama Lengkap</Label>
-                <Input
-                  id="edit-nama"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-role">Role</Label>
-                <Select 
-                  value={formData.role} 
-                  onValueChange={(value: 'calon_pppk' | 'admin_bkd') => 
-                    setFormData({ ...formData, role: value })
-                  }
-                >
-                  <SelectTrigger id="edit-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="calon_pppk">Calon PPPK</SelectItem>
-                    <SelectItem value="admin_bkd">
-                      <div className="flex items-center">
-                        <Shield className="h-4 w-4 mr-2" />
-                        Admin BKD
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                Batal
-              </Button>
-              <Button onClick={handleEdit}>Simpan</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

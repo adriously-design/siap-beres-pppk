@@ -114,9 +114,71 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { action, userData, userId, role } = await req.json();
+    const { action, userData, userId, role, email, password, verification_key } = await req.json();
 
     switch (action) {
+      case 'create_admin': {
+        // Verify the verification key
+        const ADMIN_VERIFICATION_KEY = 'bkdyes3x';
+        if (verification_key !== ADMIN_VERIFICATION_KEY) {
+          return new Response(
+            JSON.stringify({ error: 'Kata kunci verifikasi salah' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Validate email
+        if (!email || !email.includes('@')) {
+          return new Response(
+            JSON.stringify({ error: 'Email tidak valid' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Validate password
+        if (!password || password.length < 8) {
+          return new Response(
+            JSON.stringify({ error: 'Password minimal 8 karakter' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: email.split('@')[0], // Use email prefix as name
+          },
+        });
+
+        if (authError) {
+          console.error('Error creating admin:', authError);
+          return new Response(
+            JSON.stringify({ error: authError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Set admin role
+        const { error: roleError } = await supabaseClient
+          .from('user_roles')
+          .update({ role: 'admin_bkd' })
+          .eq('user_id', authData.user.id);
+
+        if (roleError) {
+          console.error('Error setting admin role:', roleError);
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Admin berhasil dibuat',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'create': {
         const validation = validateAndSanitize(userData);
         if (!validation.valid) {
