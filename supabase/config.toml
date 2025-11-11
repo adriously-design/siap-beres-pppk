@@ -1,7 +1,7 @@
 project_id = "ylhdznsfmvxfkhimglpi"
 
 [functions.admin-user-management]
-verify_jwt = false
+verify_jwt = true
 
 [functions.reset-password]
 verify_jwt = false
