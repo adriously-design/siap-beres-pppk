@@ -14,8 +14,6 @@ interface ActivityLog {
   id: string;
   document_name: string;
   user_name: string;
-  admin_name: string;
-  admin_email: string;
   action: string;
   timestamp: string;
   catatan: string;
@@ -32,13 +30,14 @@ export default function RiwayatAktivitas() {
 
   const fetchActivityLogs = async () => {
     try {
-      // First, get user documents with history
-      const { data: userDocs } = await supabase
+      // Get user documents with history
+      const { data: userDocs, error: docsError } = await supabase
         .from('user_dokumen')
         .select(`
           id,
           file_name,
           catatan_history,
+          catatan_admin,
           user_id,
           status_verifikasi,
           verified_at,
@@ -48,76 +47,44 @@ export default function RiwayatAktivitas() {
         .not('verified_at', 'is', null)
         .order('verified_at', { ascending: false });
 
-      if (!userDocs) {
+      if (docsError) {
+        console.error('Error fetching documents:', docsError);
+        setLoading(false);
+        return;
+      }
+
+      if (!userDocs || userDocs.length === 0) {
         setLoading(false);
         return;
       }
 
       const logs: ActivityLog[] = [];
 
-      // Get all unique admin IDs first
-      const adminIds = new Set<string>();
+      // Build activity logs from verified documents
       for (const doc of userDocs) {
+        // Cari catatan admin terakhir dari history
         const history = doc.catatan_history as any[];
-        if (Array.isArray(history)) {
-          for (const entry of history) {
-            if (entry.admin_id) {
-              adminIds.add(entry.admin_id);
-            }
+        let adminMessage = doc.catatan_admin || '';
+        
+        if (Array.isArray(history) && history.length > 0) {
+          // Cari pesan admin terakhir
+          const adminMessages = history.filter((entry: any) => entry.type === 'admin');
+          if (adminMessages.length > 0) {
+            const lastAdminMessage = adminMessages[adminMessages.length - 1];
+            adminMessage = lastAdminMessage.message || adminMessage;
           }
         }
+
+        logs.push({
+          id: doc.id,
+          document_name: doc.file_name,
+          user_name: (doc.profiles as any)?.full_name || 'Unknown',
+          action: doc.status_verifikasi,
+          timestamp: doc.verified_at || new Date().toISOString(),
+          catatan: adminMessage,
+        });
       }
 
-      // Fetch all admin emails in one query using edge function
-      const adminEmailMap = new Map<string, string>();
-      
-      for (const adminId of adminIds) {
-        try {
-          const { data: adminData, error } = await supabase.functions.invoke('admin-user-management', {
-            body: { 
-              action: 'get_admin_email',
-              userId: adminId
-            },
-          });
-
-          if (!error && adminData?.email) {
-            adminEmailMap.set(adminId, adminData.email);
-          }
-        } catch (err) {
-          console.error('Error fetching admin email:', err);
-        }
-      }
-
-      // Fetch admin profiles
-      const { data: adminProfiles } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', Array.from(adminIds));
-
-      const adminProfileMap = new Map(adminProfiles?.map(p => [p.id, p.full_name]) || []);
-
-      // Build activity logs
-      for (const doc of userDocs) {
-        const history = doc.catatan_history as any[];
-        if (Array.isArray(history)) {
-          for (const entry of history) {
-            if (entry.admin_id && (entry.action === 'verified' || entry.action === 'rejected')) {
-              logs.push({
-                id: `${doc.id}-${entry.timestamp}`,
-                document_name: doc.file_name,
-                user_name: (doc.profiles as any)?.full_name || 'Unknown',
-                admin_name: adminProfileMap.get(entry.admin_id) || 'Admin',
-                admin_email: adminEmailMap.get(entry.admin_id) || 'Email tidak tersedia',
-                action: entry.action,
-                timestamp: entry.timestamp,
-                catatan: entry.catatan || '',
-              });
-            }
-          }
-        }
-      }
-
-      logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setActivities(logs);
     } catch (error) {
       console.error('Error fetching activity logs:', error);
@@ -197,29 +164,23 @@ export default function RiwayatAktivitas() {
                     </div>
                     
                     <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-sm">{activity.document_name}</h3>
-                            {getActionBadge(activity.action)}
-                          </div>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-sm">{activity.document_name}</h3>
+                          {getActionBadge(activity.action)}
                         </div>
+                      </div>
                       
                       <div className="space-y-1 text-sm">
                         <p className="text-muted-foreground">
                           <span className="font-medium">Pengguna:</span> {activity.user_name}
                         </p>
                         <p className="text-muted-foreground">
-                          <span className="font-medium">Diverifikasi oleh:</span> {activity.admin_name}
-                        </p>
-                        <p className="text-muted-foreground">
-                          <span className="font-medium">Email Admin:</span> {activity.admin_email}
-                        </p>
-                        <p className="text-muted-foreground">
                           <span className="font-medium">Waktu:</span> {format(new Date(activity.timestamp), "dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale })}
                         </p>
                         {activity.catatan && (
                           <p className="text-muted-foreground">
-                            <span className="font-medium">Catatan:</span> {activity.catatan}
+                            <span className="font-medium">Catatan Admin:</span> {activity.catatan}
                           </p>
                         )}
                       </div>
