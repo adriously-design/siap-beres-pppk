@@ -118,8 +118,17 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'create_admin': {
-        // Verify the verification key
-        const ADMIN_VERIFICATION_KEY = 'bkdyes3x';
+        // Verify the verification key from environment
+        const ADMIN_VERIFICATION_KEY = Deno.env.get('ADMIN_VERIFICATION_KEY');
+        
+        if (!ADMIN_VERIFICATION_KEY) {
+          console.error('ADMIN_VERIFICATION_KEY not configured');
+          return new Response(
+            JSON.stringify({ error: 'Server configuration error' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         if (verification_key !== ADMIN_VERIFICATION_KEY) {
           return new Response(
             JSON.stringify({ error: 'Kata kunci verifikasi salah' }),
