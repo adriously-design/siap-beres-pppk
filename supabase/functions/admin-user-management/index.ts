@@ -169,14 +169,49 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Set admin role
+        // Set admin role using UPSERT to handle race conditions
         const { error: roleError } = await supabaseClient
           .from('user_roles')
-          .update({ role: 'admin_bkd' })
-          .eq('user_id', authData.user.id);
+          .upsert(
+            { 
+              user_id: authData.user.id,
+              role: 'admin_bkd'
+            },
+            { 
+              onConflict: 'user_id',
+              ignoreDuplicates: false
+            }
+          );
 
         if (roleError) {
           console.error('Error setting admin role:', roleError);
+          
+          // Cleanup: delete the created user if role assignment fails
+          await supabaseClient.auth.admin.deleteUser(authData.user.id);
+          
+          return new Response(
+            JSON.stringify({ error: 'Gagal menetapkan role admin' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Verify role was set correctly
+        const { data: verifyRole, error: verifyError } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', authData.user.id)
+          .single();
+
+        if (verifyError || verifyRole?.role !== 'admin_bkd') {
+          console.error('Role verification failed');
+          
+          // Cleanup: delete the created user
+          await supabaseClient.auth.admin.deleteUser(authData.user.id);
+          
+          return new Response(
+            JSON.stringify({ error: 'Gagal memverifikasi role admin' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         return new Response(
