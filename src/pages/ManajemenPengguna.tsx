@@ -52,11 +52,11 @@ const ManajemenPengguna = () => {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [addAdminDialogOpen, setAddAdminDialogOpen] = useState(false);
-  const [adminFormData, setAdminFormData] = useState({
-    email: "",
-    password: "",
-    verification_key: "",
+  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
+  const [userFormData, setUserFormData] = useState({
+    no_peserta: "",
+    nik: "",
+    full_name: "",
   });
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -106,8 +106,8 @@ const ManajemenPengguna = () => {
     }
   };
 
-  const handleAddAdmin = async () => {
-    if (!adminFormData.email || !adminFormData.password || !adminFormData.verification_key) {
+  const handleAddUser = async () => {
+    if (!userFormData.no_peserta || !userFormData.nik || !userFormData.full_name) {
       toast({
         title: "Error",
         description: "Semua field harus diisi",
@@ -119,10 +119,12 @@ const ManajemenPengguna = () => {
     try {
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
         body: { 
-          action: 'create_admin',
-          email: adminFormData.email,
-          password: adminFormData.password,
-          verification_key: adminFormData.verification_key,
+          action: 'create',
+          userData: {
+            no_peserta: userFormData.no_peserta,
+            nik: userFormData.nik,
+            full_name: userFormData.full_name,
+          }
         },
       });
 
@@ -130,11 +132,12 @@ const ManajemenPengguna = () => {
 
       toast({
         title: "Sukses",
-        description: "Admin baru berhasil dibuat",
+        description: `User PPPK berhasil dibuat. Password: ${data.password}`,
+        duration: 10000,
       });
 
-      setAdminFormData({ email: "", password: "", verification_key: "" });
-      setAddAdminDialogOpen(false);
+      setUserFormData({ no_peserta: "", nik: "", full_name: "" });
+      setAddUserDialogOpen(false);
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -203,7 +206,57 @@ const ManajemenPengguna = () => {
                   Kelola data Calon PPPK yang terdaftar di sistem
                 </CardDescription>
               </div>
-              <ImportUserDialog onImportSuccess={fetchUsers} />
+              <div className="flex gap-2">
+                <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">Tambah Data</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Tambah User PPPK Baru</DialogTitle>
+                      <DialogDescription>
+                        Masukkan data calon PPPK yang akan ditambahkan
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="no-peserta">No Peserta</Label>
+                        <Input
+                          id="no-peserta"
+                          value={userFormData.no_peserta}
+                          onChange={(e) => setUserFormData({ ...userFormData, no_peserta: e.target.value })}
+                          placeholder="Masukkan nomor peserta"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nik">NIK</Label>
+                        <Input
+                          id="nik"
+                          value={userFormData.nik}
+                          onChange={(e) => setUserFormData({ ...userFormData, nik: e.target.value })}
+                          placeholder="Masukkan NIK"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="full-name">Nama Lengkap</Label>
+                        <Input
+                          id="full-name"
+                          value={userFormData.full_name}
+                          onChange={(e) => setUserFormData({ ...userFormData, full_name: e.target.value })}
+                          placeholder="Masukkan nama lengkap"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setAddUserDialogOpen(false)}>
+                        Batal
+                      </Button>
+                      <Button onClick={handleAddUser}>Tambah User</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                <ImportUserDialog onImportSuccess={fetchUsers} />
+              </div>
             </div>
           </CardHeader>
           <CardContent>

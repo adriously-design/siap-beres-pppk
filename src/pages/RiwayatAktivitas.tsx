@@ -15,6 +15,7 @@ interface ActivityLog {
   document_name: string;
   user_name: string;
   admin_name: string;
+  admin_email: string;
   action: string;
   timestamp: string;
   catatan: string;
@@ -31,6 +32,7 @@ export default function RiwayatAktivitas() {
 
   const fetchActivityLogs = async () => {
     try {
+      // First, get user documents with history
       const { data: userDocs } = await supabase
         .from('user_dokumen')
         .select(`
@@ -38,11 +40,13 @@ export default function RiwayatAktivitas() {
           file_name,
           catatan_history,
           user_id,
-          dokumen_id,
+          status_verifikasi,
+          verified_at,
           profiles!user_dokumen_user_id_fkey(full_name)
         `)
-        .not('catatan_history', 'eq', '[]')
-        .order('uploaded_at', { ascending: false });
+        .in('status_verifikasi', ['verified', 'rejected'])
+        .not('verified_at', 'is', null)
+        .order('verified_at', { ascending: false });
 
       if (!userDocs) {
         setLoading(false);
@@ -51,22 +55,59 @@ export default function RiwayatAktivitas() {
 
       const logs: ActivityLog[] = [];
 
+      // Get all unique admin IDs first
+      const adminIds = new Set<string>();
       for (const doc of userDocs) {
         const history = doc.catatan_history as any[];
         if (Array.isArray(history)) {
           for (const entry of history) {
             if (entry.admin_id) {
-              const { data: adminProfile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', entry.admin_id)
-                .single();
+              adminIds.add(entry.admin_id);
+            }
+          }
+        }
+      }
 
+      // Fetch all admin emails in one query using edge function
+      const adminEmailMap = new Map<string, string>();
+      
+      for (const adminId of adminIds) {
+        try {
+          const { data: adminData, error } = await supabase.functions.invoke('admin-user-management', {
+            body: { 
+              action: 'get_admin_email',
+              userId: adminId
+            },
+          });
+
+          if (!error && adminData?.email) {
+            adminEmailMap.set(adminId, adminData.email);
+          }
+        } catch (err) {
+          console.error('Error fetching admin email:', err);
+        }
+      }
+
+      // Fetch admin profiles
+      const { data: adminProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', Array.from(adminIds));
+
+      const adminProfileMap = new Map(adminProfiles?.map(p => [p.id, p.full_name]) || []);
+
+      // Build activity logs
+      for (const doc of userDocs) {
+        const history = doc.catatan_history as any[];
+        if (Array.isArray(history)) {
+          for (const entry of history) {
+            if (entry.admin_id && (entry.action === 'verified' || entry.action === 'rejected')) {
               logs.push({
                 id: `${doc.id}-${entry.timestamp}`,
                 document_name: doc.file_name,
                 user_name: (doc.profiles as any)?.full_name || 'Unknown',
-                admin_name: adminProfile?.full_name || 'Admin',
+                admin_name: adminProfileMap.get(entry.admin_id) || 'Admin',
+                admin_email: adminEmailMap.get(entry.admin_id) || 'Email tidak tersedia',
                 action: entry.action,
                 timestamp: entry.timestamp,
                 catatan: entry.catatan || '',
@@ -156,22 +197,25 @@ export default function RiwayatAktivitas() {
                     </div>
                     
                     <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-sm">{activity.document_name}</h3>
-                          {getActionBadge(activity.action)}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-sm">{activity.document_name}</h3>
+                            {getActionBadge(activity.action)}
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(activity.timestamp), "dd MMMM yyyy, HH:mm", { locale: idLocale })}
-                        </span>
-                      </div>
                       
                       <div className="space-y-1 text-sm">
                         <p className="text-muted-foreground">
                           <span className="font-medium">Pengguna:</span> {activity.user_name}
                         </p>
                         <p className="text-muted-foreground">
-                          <span className="font-medium">Admin:</span> {activity.admin_name}
+                          <span className="font-medium">Diverifikasi oleh:</span> {activity.admin_name}
+                        </p>
+                        <p className="text-muted-foreground">
+                          <span className="font-medium">Email Admin:</span> {activity.admin_email}
+                        </p>
+                        <p className="text-muted-foreground">
+                          <span className="font-medium">Waktu:</span> {format(new Date(activity.timestamp), "dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale })}
                         </p>
                         {activity.catatan && (
                           <p className="text-muted-foreground">

@@ -152,6 +152,29 @@ const ManajemenAdmin = () => {
   const handleDelete = async () => {
     if (!selectedAdmin) return;
 
+    // Check if this is the last admin
+    if (admins.length === 1) {
+      toast({
+        title: "Error",
+        description: "Tidak dapat menghapus admin terakhir. Sistem harus memiliki minimal 1 admin.",
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+      return;
+    }
+
+    // Check if trying to delete self
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id === selectedAdmin.id) {
+      toast({
+        title: "Error",
+        description: "Anda tidak dapat menghapus akun admin Anda sendiri.",
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
         body: { 

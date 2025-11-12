@@ -117,6 +117,31 @@ Deno.serve(async (req) => {
     const { action, userData, userId, role, email, password, verification_key } = await req.json();
 
     switch (action) {
+      case 'get_admin_email': {
+        // Get admin email for activity logs
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'User ID is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: userData, error: userError } = await supabaseClient.auth.admin.getUserById(userId);
+        
+        if (userError) {
+          console.error('Error fetching user email:', userError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to fetch user email' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ email: userData.user.email }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'create_admin': {
         // Verify the verification key from environment
         const ADMIN_VERIFICATION_KEY = Deno.env.get('ADMIN_VERIFICATION_KEY');
