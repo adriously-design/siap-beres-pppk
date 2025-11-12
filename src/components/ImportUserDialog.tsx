@@ -7,7 +7,11 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-export function ImportUserDialog() {
+interface ImportUserDialogProps {
+  onImportSuccess?: () => void;
+}
+
+export function ImportUserDialog({ onImportSuccess }: ImportUserDialogProps) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -144,6 +148,11 @@ export function ImportUserDialog() {
           fileInputRef.current.value = "";
         }
         setOpen(false);
+        
+        // Trigger refresh in parent component
+        if (onImportSuccess) {
+          onImportSuccess();
+        }
       } else {
         toast({
           variant: "destructive",

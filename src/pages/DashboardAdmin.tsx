@@ -214,7 +214,7 @@ export default function DashboardAdmin() {
         </div>
 
         {/* Action Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <Card 
             className="hover:shadow-md transition-shadow cursor-pointer"
             onClick={() => navigate("/review-dokumen")}
@@ -239,7 +239,7 @@ export default function DashboardAdmin() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
-                Manajemen Pengguna
+                Kelola PPPK
               </CardTitle>
               <CardDescription>
                 Kelola dan import akun Calon PPPK
@@ -254,6 +254,24 @@ export default function DashboardAdmin() {
                 navigate("/manajemen-pengguna");
               }}>
                 Lihat Semua
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/manajemen-admin")}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-destructive" />
+                Kelola Admin
+              </CardTitle>
+              <CardDescription>
+                Manajemen akun Admin BKD
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" className="w-full">
+                Kelola Admin
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </CardContent>

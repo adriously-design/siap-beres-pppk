@@ -12,6 +12,7 @@ import ResetPasswordPPPK from "./pages/ResetPasswordPPPK";
 import DashboardPPPK from "./pages/DashboardPPPK";
 import DashboardAdmin from "./pages/DashboardAdmin";
 import ManajemenPengguna from "./pages/ManajemenPengguna";
+import ManajemenAdmin from "./pages/ManajemenAdmin";
 import UploadDokumen from "./pages/UploadDokumen";
 import EBimtek from "./pages/EBimtek";
 import KelolaEBimtek from "./pages/KelolaEBimtek";
@@ -55,6 +56,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin_bkd']}>
                   <ManajemenPengguna />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/manajemen-admin" 
+              element={
+                <ProtectedRoute allowedRoles={['admin_bkd']}>
+                  <ManajemenAdmin />
                 </ProtectedRoute>
               } 
             />
