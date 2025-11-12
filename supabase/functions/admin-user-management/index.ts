@@ -169,19 +169,11 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Set admin role using UPSERT to handle race conditions
+        // Update the role created by the trigger to admin_bkd
         const { error: roleError } = await supabaseClient
           .from('user_roles')
-          .upsert(
-            { 
-              user_id: authData.user.id,
-              role: 'admin_bkd'
-            },
-            { 
-              onConflict: 'user_id',
-              ignoreDuplicates: false
-            }
-          );
+          .update({ role: 'admin_bkd' })
+          .eq('user_id', authData.user.id);
 
         if (roleError) {
           console.error('Error setting admin role:', roleError);
