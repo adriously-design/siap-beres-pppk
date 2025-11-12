@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, FileText, CheckCircle2, Clock, AlertCircle, BookOpen, ArrowRight, History } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+
 interface AdminStats {
   totalUsers: number;
   totalDocuments: number;
@@ -14,6 +15,7 @@ interface AdminStats {
   verifiedDocs: number;
   rejectedDocs: number;
 }
+
 export default function DashboardAdmin() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<AdminStats>({
@@ -21,65 +23,83 @@ export default function DashboardAdmin() {
     totalDocuments: 0,
     pendingReviews: 0,
     verifiedDocs: 0,
-    rejectedDocs: 0
+    rejectedDocs: 0,
   });
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     fetchStats();
 
     // Setup realtime subscription for stats updates
-    const channel = supabase.channel('admin-stats-updates').on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'user_dokumen'
-    }, () => {
-      fetchStats(); // Refresh stats when documents change
-    }).on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'profiles'
-    }, () => {
-      fetchStats(); // Refresh stats when users change
-    }).subscribe();
+    const channel = supabase
+      .channel('admin-stats-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_dokumen'
+        },
+        () => {
+          fetchStats(); // Refresh stats when documents change
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        () => {
+          fetchStats(); // Refresh stats when users change
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
   const fetchStats = async () => {
     try {
       // Fetch all active profiles (users that still exist)
-      const {
-        data: activeProfiles
-      } = await supabase.from('profiles').select('id');
+      const { data: activeProfiles } = await supabase
+        .from('profiles')
+        .select('id');
+      
       const activeUserIds = new Set(activeProfiles?.map(p => p.id) || []);
 
       // Fetch user roles for Calon PPPK
-      const {
-        data: userRoles
-      } = await supabase.from('user_roles').select('user_id').eq('role', 'calon_pppk');
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'calon_pppk');
 
       // Filter only active users
       const activePPPK = userRoles?.filter(ur => activeUserIds.has(ur.user_id)) || [];
 
       // Fetch all documents
-      const {
-        data: allDocs
-      } = await supabase.from('user_dokumen').select('status_verifikasi, user_id').order('uploaded_at', {
-        ascending: false
-      });
+      const { data: allDocs } = await supabase
+        .from('user_dokumen')
+        .select('status_verifikasi, user_id')
+        .order('uploaded_at', { ascending: false });
 
       // Filter only documents from active users
       const activeUserDocs = allDocs?.filter(d => activeUserIds.has(d.user_id)) || [];
+
       const totalDocuments = activeUserDocs.length;
       const pendingReviews = activeUserDocs.filter(d => d.status_verifikasi === 'pending').length;
       const verifiedDocs = activeUserDocs.filter(d => d.status_verifikasi === 'verified').length;
       const rejectedDocs = activeUserDocs.filter(d => d.status_verifikasi === 'rejected').length;
+
       setStats({
         totalUsers: activePPPK.length,
         totalDocuments,
         pendingReviews,
         verifiedDocs,
-        rejectedDocs
+        rejectedDocs,
       });
     } catch (error) {
       console.error('Error fetching admin stats:', error);
@@ -87,7 +107,9 @@ export default function DashboardAdmin() {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen bg-background">
+
+  return (
+    <div className="min-h-screen bg-background">
       <Navbar />
       
       <main className="container mx-auto px-4 py-8">
@@ -107,10 +129,14 @@ export default function DashboardAdmin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? <Skeleton className="h-10 w-20" /> : <div className="flex items-center justify-between">
+              {loading ? (
+                <Skeleton className="h-10 w-20" />
+              ) : (
+                <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold">{stats.totalUsers}</div>
                   <Users className="h-8 w-8 text-primary" />
-                </div>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -121,10 +147,14 @@ export default function DashboardAdmin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? <Skeleton className="h-10 w-20" /> : <div className="flex items-center justify-between">
+              {loading ? (
+                <Skeleton className="h-10 w-20" />
+              ) : (
+                <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold">{stats.totalDocuments}</div>
                   <FileText className="h-8 w-8 text-muted-foreground" />
-                </div>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -135,10 +165,14 @@ export default function DashboardAdmin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? <Skeleton className="h-10 w-20" /> : <div className="flex items-center justify-between">
+              {loading ? (
+                <Skeleton className="h-10 w-20" />
+              ) : (
+                <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold text-warning">{stats.pendingReviews}</div>
                   <Clock className="h-8 w-8 text-warning" />
-                </div>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -149,10 +183,14 @@ export default function DashboardAdmin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? <Skeleton className="h-10 w-20" /> : <div className="flex items-center justify-between">
+              {loading ? (
+                <Skeleton className="h-10 w-20" />
+              ) : (
+                <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold text-accent">{stats.verifiedDocs}</div>
                   <CheckCircle2 className="h-8 w-8 text-accent" />
-                </div>}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -163,17 +201,24 @@ export default function DashboardAdmin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? <Skeleton className="h-10 w-20" /> : <div className="flex items-center justify-between">
+              {loading ? (
+                <Skeleton className="h-10 w-20" />
+              ) : (
+                <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold text-destructive">{stats.rejectedDocs}</div>
                   <AlertCircle className="h-8 w-8 text-destructive" />
-                </div>}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Action Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/review-dokumen")}>
+          <Card 
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate("/review-dokumen")}
+          >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-warning" />
@@ -204,10 +249,10 @@ export default function DashboardAdmin() {
               <Badge variant="outline" className="text-lg px-4 py-2">
                 {stats.totalUsers} Pengguna
               </Badge>
-              <Button variant="outline" className="w-full" onClick={e => {
-              e.stopPropagation();
-              navigate("/manajemen-pengguna");
-            }}>
+              <Button variant="outline" className="w-full" onClick={(e) => {
+                e.stopPropagation();
+                navigate("/manajemen-pengguna");
+              }}>
                 Lihat Semua
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -221,7 +266,7 @@ export default function DashboardAdmin() {
                 Kelola Admin
               </CardTitle>
               <CardDescription>
-                Kelola akun verificator admin BKD
+                Manajemen akun Admin BKD
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -234,7 +279,8 @@ export default function DashboardAdmin() {
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/kelola-e-bimtek")}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">Kelola E-Bimtek<BookOpen className="h-5 w-5 text-accent" />
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-accent" />
                 Kelola E-Bimtek
               </CardTitle>
               <CardDescription>
@@ -277,9 +323,10 @@ export default function DashboardAdmin() {
             <p>• {stats.totalUsers} Calon PPPK terdaftar dalam sistem</p>
             <p>• {stats.totalDocuments} Total dokumen telah diupload</p>
             <p>• {stats.pendingReviews} Dokumen menunggu verifikasi Anda</p>
-            <p>• Tingkat verifikasi: {stats.totalDocuments > 0 ? Math.round(stats.verifiedDocs / stats.totalDocuments * 100) : 0}%</p>
+            <p>• Tingkat verifikasi: {stats.totalDocuments > 0 ? Math.round((stats.verifiedDocs / stats.totalDocuments) * 100) : 0}%</p>
           </CardContent>
         </Card>
       </main>
-    </div>;
+    </div>
+  );
 }
