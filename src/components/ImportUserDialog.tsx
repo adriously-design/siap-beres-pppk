@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import Papa from "papaparse";
 
 interface ImportUserDialogProps {
   onImportSuccess?: () => void;
@@ -20,7 +21,7 @@ export function ImportUserDialog({ onImportSuccess }: ImportUserDialogProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type === "text/csv") {
+    if (selectedFile && (selectedFile.type === "text/csv" || selectedFile.name.endsWith(".csv"))) {
       setFile(selectedFile);
     } else {
       toast({
@@ -31,7 +32,7 @@ export function ImportUserDialog({ onImportSuccess }: ImportUserDialogProps) {
     }
   };
 
-  const handleImport = async () => {
+  const handleImport = () => {
     if (!file) {
       toast({
         variant: "destructive",
@@ -43,132 +44,120 @@ export function ImportUserDialog({ onImportSuccess }: ImportUserDialogProps) {
 
     setLoading(true);
 
-    try {
-      const text = await file.text();
-      
-      // Handle different line endings and normalize
-      const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      const lines = normalizedText.trim().split('\n').filter(line => line.trim().length > 0);
-      
-      const users = lines.map((line, index) => {
-        // Remove BOM if present
-        let cleanLine = line.replace(/^\uFEFF/, '');
-        
-        // Remove dangerous CSV formula characters
-        cleanLine = cleanLine.replace(/^[=+\-@]/, '');
-        
-        // Handle quoted fields and split by comma
-        const parts: string[] = [];
-        let currentPart = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < cleanLine.length; i++) {
-          const char = cleanLine[i];
-          
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            parts.push(currentPart.trim());
-            currentPart = '';
-          } else {
-            currentPart += char;
-          }
-        }
-        parts.push(currentPart.trim());
-        
-        if (parts.length !== 3) {
-          throw new Error(`Baris ${index + 1}: Format tidak valid (ditemukan ${parts.length} kolom, dibutuhkan 3)`);
-        }
-        
-        const [no_peserta, nik, full_name] = parts.map(p => p.replace(/^["']|["']$/g, '').trim());
-        
-        // Validate NIK is numeric
-        if (!/^\d{16}$/.test(nik)) {
-          throw new Error(`Baris ${index + 1}: NIK harus 16 digit angka`);
-        }
-        
-        // Sanitize name - remove dangerous characters
-        const sanitizedName = full_name
-          .replace(/[<>"']/g, '')
-          .replace(/[;]/g, '')
-          .trim();
-        
-        if (!no_peserta || !sanitizedName) {
-          throw new Error(`Baris ${index + 1}: Data tidak lengkap`);
-        }
-        
-        return { no_peserta, nik, full_name: sanitizedName };
-      });
+    Papa.parse(file, {
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const users = results.data.map((row: any, index) => {
+            // row is an array of columns
+            const parts = row.map((part: string) => String(part).trim());
 
-      // Call edge function for bulk create with server-side validation
-      const { data, error } = await supabase.functions.invoke('admin-user-management', {
-        body: { 
-          action: 'bulk_create',
-          userData: users
-        },
-      });
+            if (parts.length !== 3) {
+              throw new Error(`Baris ${index + 1}: Format tidak valid (ditemukan ${parts.length} kolom, dibutuhkan 3)`);
+            }
+            
+            let [no_peserta, nik, full_name] = parts;
 
-      if (error) throw error;
+            // Remove dangerous CSV formula characters from the first column
+            no_peserta = no_peserta.replace(/^[=+\-@]/, '');
 
-      const { results, summary } = data;
-      
-      // Show detailed results
-      const passwordList = results
-        .filter((r: any) => r.success)
-        .map((r: any) => `${r.no_peserta}: ${r.password}`)
-        .join('\n');
-
-      if (summary.successCount > 0) {
-        toast({
-          title: "Import selesai",
-          description: `Berhasil: ${summary.successCount}, Gagal: ${summary.errorCount}`,
-        });
-
-        // Show passwords in a downloadable format
-        if (passwordList) {
-          const blob = new Blob([`Password untuk user yang berhasil dibuat:\n\n${passwordList}\n\nHARAP SIMPAN FILE INI DENGAN AMAN!`], 
-            { type: 'text/plain' });
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `passwords_${new Date().toISOString().split('T')[0]}.txt`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-
-          toast({
-            title: "Password berhasil disimpan",
-            description: "File password telah diunduh. Berikan password kepada user yang bersangkutan.",
+            // Validate NIK is numeric and has 16 digits
+            if (!/^\d{16}$/.test(nik)) {
+              throw new Error(`Baris ${index + 1}: NIK harus 16 digit angka`);
+            }
+            
+            // Sanitize name - remove dangerous characters
+            const sanitizedName = full_name
+              .replace(/[<>"']/g, '')
+              .replace(/[;]/g, '')
+              .trim();
+            
+            if (!no_peserta || !sanitizedName) {
+              throw new Error(`Baris ${index + 1}: Data tidak lengkap`);
+            }
+            
+            return { no_peserta, nik, full_name: sanitizedName };
           });
-        }
 
-        setFile(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
+          // Call edge function for bulk create with server-side validation
+          const { data, error } = await supabase.functions.invoke('admin-user-management', {
+            body: { 
+              action: 'bulk_create',
+              userData: users
+            },
+          });
+
+          if (error) throw error;
+
+          const { results: importResults, summary } = data;
+          
+          // Show detailed results
+          const passwordList = importResults
+            .filter((r: any) => r.success)
+            .map((r: any) => `${r.no_peserta}: ${r.password}`)
+            .join('\n');
+
+          if (summary.successCount > 0) {
+            toast({
+              title: "Import selesai",
+              description: `Berhasil: ${summary.successCount}, Gagal: ${summary.errorCount}`,
+            });
+
+            // Show passwords in a downloadable format
+            if (passwordList) {
+              const blob = new Blob([`Password untuk user yang berhasil dibuat:\n\n${passwordList}\n\nHARAP SIMPAN FILE INI DENGAN AMAN!`], 
+                { type: 'text/plain' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `passwords_${new Date().toISOString().split('T')[0]}.txt`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+
+              toast({
+                title: "Password berhasil disimpan",
+                description: "File password telah diunduh. Berikan password kepada user yang bersangkutan.",
+              });
+            }
+
+            setFile(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+            }
+            setOpen(false);
+            
+            // Trigger refresh in parent component
+            if (onImportSuccess) {
+              onImportSuccess();
+            }
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Import gagal",
+              description: "Tidak ada user yang berhasil dibuat. Periksa format file CSV dan pastikan tidak ada data duplikat.",
+            });
+          }
+        } catch (error: any) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: error.message || "Gagal mengimport data",
+          });
+        } finally {
+          setLoading(false);
         }
-        setOpen(false);
-        
-        // Trigger refresh in parent component
-        if (onImportSuccess) {
-          onImportSuccess();
-        }
-      } else {
+      },
+      error: (err: any) => {
         toast({
           variant: "destructive",
-          title: "Import gagal",
-          description: "Tidak ada user yang berhasil dibuat. Periksa format file CSV.",
+          title: "Error Parsing CSV",
+          description: err.message,
         });
+        setLoading(false);
       }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Gagal mengimport data",
-      });
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
