@@ -83,9 +83,9 @@ All colors MUST be HSL.
     --popover: 215 25% 12%;
     --popover-foreground: 210 20% 98%;
 
-    --primary: 210 90% 55%;
+    --primary: 210 10% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 210 90% 48%;
+    --primary-hover: 210 10% 45%;
 
     --secondary: 215 20% 18%;
     --secondary-foreground: 210 20% 98%;
@@ -104,16 +104,16 @@ All colors MUST be HSL.
 
     --border: 215 20% 20%;
     --input: 215 20% 20%;
-    --ring: 210 90% 55%;
+    --ring: 210 10% 50%;
 
     --sidebar-background: 215 25% 12%;
     --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 210 90% 55%;
+    --sidebar-primary: 210 10% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 20% 18%;
     --sidebar-accent-foreground: 210 20% 98%;
     --sidebar-border: 215 20% 20%;
-    --sidebar-ring: 210 90% 55%;
+    --sidebar-ring: 210 10% 50%;
   }
 }
 
@@ -142,5 +142,15 @@ All colors MUST be HSL.
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+/* Custom styles for ThemeToggle in footer */
+@layer components {
+  footer .theme-toggle-button {
+    @apply border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground;
+  }
+  .dark footer .theme-toggle-button {
+    @apply border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground;
   }
 }

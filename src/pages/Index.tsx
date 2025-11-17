@@ -1,11 +1,40 @@
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mail, Phone, Youtube, Instagram } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import Autoplay from "embla-carousel-autoplay";
+import { Mail, Phone, Youtube, Instagram, FileUp, FileCheck2, Presentation } from "lucide-react";
 import heroImage from "@/assets/hero-recruitment.jpg";
 import logoNTT from "@/assets/logo-ntt.png";
+import { ThemeToggle } from "@/components/ThemeToggle";
 const Index = () => {
   const navigate = useNavigate();
+  const plugin = React.useRef(
+    Autoplay({ delay: 3000, stopOnInteraction: true })
+  );
+
+  const carouselImages = [
+    {
+      src: heroImage,
+      alt: "Suasana kerja di kantor pemerintahan",
+    },
+    {
+      src: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=1932&auto=format&fit=crop",
+      alt: "Pegawai sedang berdiskusi",
+    },
+    {
+      src: "https://images.unsplash.com/photo-1521791136064-7986c2920216?q=80&w=1769&auto=format&fit=crop",
+      alt: "Tim bekerja sama dalam sebuah proyek",
+    },
+  ];
+
   return <div className="min-h-screen flex flex-col">
       {/* Navbar */}
       <nav className="bg-primary text-primary-foreground shadow-lg">
@@ -42,8 +71,25 @@ const Index = () => {
                 </Button>
               </div>
             </div>
-            <div className="relative">
-              <img src={heroImage} alt="PPPK Portal" className="rounded-2xl shadow-2xl w-full h-auto" />
+            <div className="relative flex items-center justify-center">
+              <Carousel
+                plugins={[plugin.current]}
+                className="w-full max-w-lg"
+                onMouseEnter={plugin.current.stop}
+                onMouseLeave={plugin.current.reset}
+              >
+                <CarouselContent>
+                  {carouselImages.map((image, index) => (
+                    <CarouselItem key={index}>
+                      <div className="p-1">
+                        <img src={image.src} alt={image.alt} className="rounded-2xl shadow-2xl w-full h-auto aspect-video object-cover" />
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                <CarouselPrevious className="absolute left-4" />
+                <CarouselNext className="absolute right-4" />
+              </Carousel>
             </div>
           </div>
         </div>
@@ -57,9 +103,7 @@ const Index = () => {
             <Card className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6 space-y-4">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <FileUp className="w-8 h-8 text-primary" />
                 </div>
                 <h4 className="text-xl font-semibold text-center">Upload Dokumen</h4>
                 <p className="text-muted-foreground text-center">Upload dan kelola dokumen persyaratan pengusulan NI PPPK dengan mudah dan aman</p>
@@ -69,9 +113,7 @@ const Index = () => {
             <Card className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6 space-y-4">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
+                  <FileCheck2 className="w-8 h-8 text-primary" />
                 </div>
                 <h4 className="text-xl font-semibold text-center">Verifikasi Dokumen</h4>
                 <p className="text-muted-foreground text-center">
@@ -83,9 +125,7 @@ const Index = () => {
             <Card className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6 space-y-4">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
+                  <Presentation className="w-8 h-8 text-primary" />
                 </div>
                 <h4 className="text-xl font-semibold text-center">E-Bimtek</h4>
                 <p className="text-muted-foreground text-center">Akses panduan teknis secara online kapan saja dan dimana saja</p>
@@ -98,13 +138,13 @@ const Index = () => {
       {/* Footer */}
       <footer className="bg-primary text-primary-foreground mt-auto">
         <div className="container mx-auto px-4 py-12">
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             <div className="space-y-4">
               <h5 className="text-xl font-bold">BKD Provinsi Nusa Tenggara Timur</h5>
-              <p className="text-sm opacity-90">
+              <p className="text-sm opacity-100">
                 Bidang Perencanaan, Pendidikan dan Sistem Informasi Pegawai
               </p>
-              <p className="text-sm opacity-90">
+              <p className="text-sm opacity-100">
                 Jln. Raya El Tari No.52 Oebobo Kupang<br />
                 Kel. Oebobo, Kec. Kota Raja, Kota Kupang, Nusa Tenggara Tim. 85111
               </p>
@@ -130,8 +170,29 @@ const Index = () => {
                 </a>
               </div>
             </div>
+            <div className="space-y-4">
+              <h5 className="text-xl font-bold">Lokasi Kami</h5>
+               <p className="text-sm opacity-100">
+                Badan Kepegawaian Daerah Provinsi NTT
+              </p>
+              <div className="overflow-hidden rounded-lg shadow-lg aspect-video">
+                <iframe
+                  src="https://maps.google.com/maps?q=Badan%20Kepegawaian%20Daerah%20Provinsi%20Nusa%20Tenggara%20Timur&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  allowFullScreen={true}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title="Lokasi BKD Provinsi NTT"
+                ></iframe>
+              </div>
+            </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-primary-foreground/20 text-center text-sm opacity-75">© 2025 - Bidang Perencanaan, Pendidikan dan SIstem Informasi Pegawai</div>
+          <div className="mt-8 pt-8 border-t border-primary-foreground/20 flex justify-between items-center text-sm opacity-75">
+            <span>© 2025 - Bidang Perencanaan, Pendidikan dan SIstem Informasi Pegawai</span>
+            <ThemeToggle />
+          </div>
         </div>
       </footer>
     </div>;
