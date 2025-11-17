@@ -127,7 +127,6 @@ const AuthPPPK = () => {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Gunakan No Peserta dan Password yang diberikan oleh admin.<br/>
             Jika belum pernah login, silahkan reset password terlebih dahulu.
           </p>
         </CardContent>
