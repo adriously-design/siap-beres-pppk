@@ -152,7 +152,7 @@ export const Navbar = () => {
                 <Button variant="ghost" className="gap-2">
                   <User className="h-4 w-4" />
                   <span className="hidden sm:inline">
-                    {userRole === 'admin_bkd' ? 'Admin BKD' : fullName || 'Calon PPPK'}
+                    {userRole === 'admin_bkd' ? user?.email : fullName || 'Calon PPPK'}
                   </span>
                 </Button>
               </DropdownMenuTrigger>

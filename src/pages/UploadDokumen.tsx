@@ -138,7 +138,7 @@ export default function UploadDokumen() {
       }
 
       const { presignedUrl } = await response.json();
-      window.open(presignedUrl, '_blank');
+      window.open(presignedUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
       console.error('Error previewing file:', error);
       toast({

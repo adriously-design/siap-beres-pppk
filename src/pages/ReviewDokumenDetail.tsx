@@ -395,7 +395,7 @@ export default function ReviewDokumenDetail() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {documents.map((doc) => (
               <Card key={doc.id}>
                 <CardHeader className="pb-3">
