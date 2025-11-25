@@ -1,23 +1,17 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-
-const adminLoginSchema = z.object({
-  email: z.string().email("Email tidak valid"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
-});
+import { adminLoginSchema } from "@/lib/schemas";
+import { useLogin } from "@/hooks/useAuth";
 
 const AuthAdmin = () => {
-  const navigate = useNavigate();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { login, loading } = useLogin();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -25,36 +19,10 @@ const AuthAdmin = () => {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
     try {
       const validated = adminLoginSchema.parse(formData);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: validated.email,
-        password: validated.password,
-      });
-
-      if (error) throw error;
-
-      // Fetch user role to determine redirect
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', data.user.id)
-        .single();
-
-      // Redirect based on role
-      if (roleData?.role === 'admin_bkd') {
-        navigate("/dashboard-admin");
-      } else {
-        navigate("/dashboard-pppk");
-      }
-
-      toast({
-        title: "Login Berhasil",
-        description: "Selamat datang di SIAP BERES",
-      });
+      await login(validated.email, validated.password);
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({
@@ -62,15 +30,7 @@ const AuthAdmin = () => {
           description: error.errors[0].message,
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Login Gagal",
-          description: "Email atau password tidak valid",
-          variant: "destructive",
-        });
       }
-    } finally {
-      setLoading(false);
     }
   };
 

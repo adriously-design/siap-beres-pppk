@@ -11,31 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { MessageHistoryDialog } from "@/components/MessageHistoryDialog";
-import { ArrowLeft, FileText, CheckCircle2, XCircle, Eye, MessageSquare } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
+import { BatchActionToolbar } from "@/components/review-dokumen/BatchActionToolbar";
+import { DocumentCard } from "@/components/review-dokumen/DocumentCard";
 
-interface UserProfile {
-  full_name: string;
-  no_peserta: string;
-}
-
-interface DokumenItem {
-  id: string;
-  nama_dokumen: string;
-  deskripsi: string;
-}
-
-interface UserDokumenItem {
-  id: string;
-  dokumen_id: string;
-  file_name: string;
-  file_path: string;
-  status_verifikasi: string;
-  catatan_admin: string | null;
-  catatan_user: string | null;
-  catatan_history: any[];
-  uploaded_at: string;
-  dokumen: DokumenItem;
-}
+import { UserProfile, UserDokumenItem, VerificationStatus } from "@/types";
 
 export default function ReviewDokumenDetail() {
   const { userId } = useParams<{ userId: string }>();
@@ -92,7 +72,7 @@ export default function ReviewDokumenDetail() {
 
       if (docsData) {
         setDocuments(docsData as any);
-        
+
         // Initialize admin notes
         const notes: Record<string, string> = {};
         docsData.forEach((doc: any) => {
@@ -150,22 +130,22 @@ export default function ReviewDokumenDetail() {
     }
   };
 
-  const handleUpdateStatus = async (docId: string, status: 'verified' | 'rejected') => {
+  const handleUpdateStatus = async (docId: string, status: VerificationStatus) => {
     setUpdating(docId);
     try {
       const currentDoc = documents.find(d => d.id === docId);
       const currentHistory = currentDoc?.catatan_history || [];
-      
+
       // Add new message to history if there's an admin note
-      const newHistory = adminNotes[docId]?.trim() 
+      const newHistory = adminNotes[docId]?.trim()
         ? [
-            ...currentHistory,
-            {
-              type: 'admin',
-              message: adminNotes[docId],
-              timestamp: new Date().toISOString()
-            }
-          ]
+          ...currentHistory,
+          {
+            type: 'admin',
+            message: adminNotes[docId],
+            timestamp: new Date().toISOString()
+          }
+        ]
         : currentHistory;
 
       const { error } = await supabase
@@ -173,8 +153,8 @@ export default function ReviewDokumenDetail() {
         .update({
           status_verifikasi: status,
           catatan_admin: adminNotes[docId] || null,
-          catatan_history: newHistory,
-          verified_at: status === 'verified' ? new Date().toISOString() : null,
+          catatan_history: newHistory as any,
+          verified_at: new Date().toISOString(), // Always set timestamp
         })
         .eq('id', docId);
 
@@ -221,7 +201,9 @@ export default function ReviewDokumenDetail() {
     }
   };
 
-  const handleBatchUpdate = async (status: 'verified' | 'rejected') => {
+  const handleBatchUpdate = async (status: VerificationStatus) => {
+    if (status === 'pending') return; // Should not happen from UI
+
     if (selectedDocs.size === 0) {
       toast({
         title: "Error",
@@ -232,7 +214,7 @@ export default function ReviewDokumenDetail() {
     }
 
     setUpdating('batch');
-    
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
@@ -258,8 +240,8 @@ export default function ReviewDokumenDetail() {
           .update({
             status_verifikasi: status,
             catatan_admin: batchNote || `Batch ${status === 'verified' ? 'verifikasi' : 'penolakan'}`,
-            verified_at: status === 'verified' ? new Date().toISOString() : null,
-            catatan_history: newHistory
+            verified_at: new Date().toISOString(), // Always set timestamp
+            catatan_history: newHistory as any
           })
           .eq('id', docId);
       });
@@ -270,7 +252,7 @@ export default function ReviewDokumenDetail() {
         title: "Berhasil",
         description: `${selectedDocs.size} dokumen berhasil ${status === 'verified' ? 'diverifikasi' : 'ditolak'}`,
       });
-      
+
       setSelectedDocs(new Set());
       setBatchNote("");
       fetchUserDocuments();
@@ -286,16 +268,7 @@ export default function ReviewDokumenDetail() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'verified':
-        return <Badge className="bg-green-600">Terverifikasi</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive">Ditolak</Badge>;
-      default:
-        return <Badge className="bg-yellow-600">Pending</Badge>;
-    }
-  };
+
 
   if (loading) {
     return (
@@ -316,7 +289,7 @@ export default function ReviewDokumenDetail() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         <Button
           variant="ghost"
@@ -336,55 +309,15 @@ export default function ReviewDokumenDetail() {
         </div>
 
         {documents.length > 0 && (
-          <Card className="mb-4 bg-muted/50">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={selectedDocs.size === documents.length && documents.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                    />
-                    <span className="text-sm font-medium">
-                      {selectedDocs.size > 0 ? `${selectedDocs.size} dipilih` : 'Pilih Semua'}
-                    </span>
-                  </div>
-                  
-                  {selectedDocs.size > 0 && (
-                    <Textarea
-                      placeholder="Catatan untuk batch action (opsional)"
-                      value={batchNote}
-                      onChange={(e) => setBatchNote(e.target.value)}
-                      className="h-9 min-h-9 w-64"
-                    />
-                  )}
-                </div>
-
-                {selectedDocs.size > 0 && (
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleBatchUpdate('verified')}
-                      disabled={updating === 'batch'}
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Verifikasi {selectedDocs.size} Dokumen
-                    </Button>
-                    <Button
-                      onClick={() => handleBatchUpdate('rejected')}
-                      disabled={updating === 'batch'}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Tolak {selectedDocs.size} Dokumen
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <BatchActionToolbar
+            selectedCount={selectedDocs.size}
+            totalCount={documents.length}
+            onSelectAll={toggleSelectAll}
+            batchNote={batchNote}
+            setBatchNote={setBatchNote}
+            onBatchUpdate={handleBatchUpdate}
+            updating={updating === 'batch'}
+          />
         )}
 
         {documents.length === 0 ? (
@@ -397,99 +330,25 @@ export default function ReviewDokumenDetail() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {documents.map((doc) => (
-              <Card key={doc.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <Checkbox
-                          checked={selectedDocs.has(doc.id)}
-                          onCheckedChange={() => toggleDocSelection(doc.id)}
-                        />
-                        <CardTitle className="text-lg">{doc.dokumen.nama_dokumen}</CardTitle>
-                        {getStatusBadge(doc.status_verifikasi)}
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">{doc.dokumen.deskripsi}</p>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Upload: {new Date(doc.uploaded_at).toLocaleDateString('id-ID')} • {doc.file_name}
-                      </p>
-                    </div>
-                    {doc.catatan_history && doc.catatan_history.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewHistory(doc.catatan_history)}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-1" />
-                        <span className="text-xs">Riwayat ({doc.catatan_history.length})</span>
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {doc.catatan_user && (
-                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                      <Label className="text-xs font-medium text-blue-900 dark:text-blue-100">
-                        Catatan dari PPPK:
-                      </Label>
-                      <p className="text-xs mt-1 text-blue-800 dark:text-blue-200">
-                        {doc.catatan_user}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`notes-${doc.id}`} className="text-sm">Catatan Admin</Label>
-                    <Textarea
-                      id={`notes-${doc.id}`}
-                      value={adminNotes[doc.id] || ''}
-                      onChange={(e) => setAdminNotes(prev => ({
-                        ...prev,
-                        [doc.id]: e.target.value
-                      }))}
-                      placeholder="Tambahkan catatan atau feedback..."
-                      className="min-h-[80px] text-sm"
-                      disabled={updating === doc.id}
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handlePreview(doc.id)}
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <Eye className="h-3.5 w-3.5 mr-1" />
-                      Lihat
-                    </Button>
-                    <Button
-                      onClick={() => handleUpdateStatus(doc.id, 'verified')}
-                      disabled={updating === doc.id || doc.status_verifikasi === 'verified'}
-                      size="sm"
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                      {updating === doc.id ? 'Proses...' : 'Verifikasi'}
-                    </Button>
-                    <Button
-                      onClick={() => handleUpdateStatus(doc.id, 'rejected')}
-                      disabled={updating === doc.id || doc.status_verifikasi === 'rejected'}
-                      variant="destructive"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <XCircle className="h-3.5 w-3.5 mr-1" />
-                      {updating === doc.id ? 'Proses...' : 'Tolak'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <DocumentCard
+                key={doc.id}
+                doc={doc}
+                selected={selectedDocs.has(doc.id)}
+                onSelect={() => toggleDocSelection(doc.id)}
+                adminNote={adminNotes[doc.id] || ''}
+                onNoteChange={(note) => setAdminNotes(prev => ({ ...prev, [doc.id]: note }))}
+                onPreview={() => handlePreview(doc.id)}
+                onUpdateStatus={(status) => handleUpdateStatus(doc.id, status)}
+                onViewHistory={() => handleViewHistory(doc.catatan_history)}
+                updating={updating === doc.id}
+                isVerified={doc.status_verifikasi === 'verified'}
+                isRejected={doc.status_verifikasi === 'rejected'}
+              />
             ))}
           </div>
         )}
       </main>
-      
+
       <MessageHistoryDialog
         open={historyDialogOpen}
         onOpenChange={setHistoryDialogOpen}

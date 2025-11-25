@@ -17,7 +17,7 @@ function generateStrongPassword(length: number = 16): string {
   const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
   const randomValues = new Uint8Array(length);
   crypto.getRandomValues(randomValues);
-  
+
   let password = '';
   for (let i = 0; i < length; i++) {
     password += charset[randomValues[i] % charset.length];
@@ -65,14 +65,17 @@ function validateAndSanitize(userData: UserData): { valid: boolean; error?: stri
   };
 }
 
-Deno.serve(async (req) => {
+// @ts-ignore
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseClient = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         auth: {
@@ -127,7 +130,7 @@ Deno.serve(async (req) => {
         }
 
         const { data: userData, error: userError } = await supabaseClient.auth.admin.getUserById(userId);
-        
+
         if (userError) {
           console.error('Error fetching user email:', userError);
           return new Response(
@@ -142,10 +145,70 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'list_admins': {
+        // 1. Get admin user IDs
+        const { data: rolesData, error: rolesError } = await supabaseClient
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin_bkd");
+
+        if (rolesError) {
+          console.error('Error fetching roles:', rolesError);
+          return new Response(
+            JSON.stringify({ error: rolesError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const adminIds = rolesData.map((r: any) => r.user_id);
+
+        if (adminIds.length === 0) {
+          return new Response(
+            JSON.stringify({ admins: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // 2. Get profiles
+        const { data: profilesData, error: profilesError } = await supabaseClient
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", adminIds)
+          .order("created_at", { ascending: false });
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+          return new Response(
+            JSON.stringify({ error: profilesError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // 3. Get emails
+        const admins = [];
+        for (const profile of profilesData) {
+          const { data: { user }, error: userError } = await supabaseClient.auth.admin.getUserById(profile.id);
+          if (!userError && user) {
+            admins.push({
+              id: profile.id,
+              full_name: profile.full_name,
+              email: user.email,
+              role: 'admin_bkd'
+            });
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ admins }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'create_admin': {
         // Verify the verification key from environment
+        // @ts-ignore
         const ADMIN_VERIFICATION_KEY = Deno.env.get('ADMIN_VERIFICATION_KEY');
-        
+
         if (!ADMIN_VERIFICATION_KEY) {
           console.error('ADMIN_VERIFICATION_KEY not configured');
           return new Response(
@@ -153,7 +216,7 @@ Deno.serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        
+
         if (verification_key !== ADMIN_VERIFICATION_KEY) {
           return new Response(
             JSON.stringify({ error: 'Kata kunci verifikasi salah' }),
@@ -177,12 +240,20 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Validate full_name
+        if (!userData?.full_name || userData.full_name.trim().length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nama lengkap harus diisi' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
           email,
           password,
           email_confirm: true,
           user_metadata: {
-            full_name: email.split('@')[0], // Use email prefix as name
+            full_name: userData.full_name,
           },
         });
 
@@ -202,16 +273,16 @@ Deno.serve(async (req) => {
 
         if (roleError) {
           console.error('Error setting admin role:', roleError);
-          
+
           // Cleanup: delete the created user if role assignment fails
           await supabaseClient.auth.admin.deleteUser(authData.user.id);
-          
+
           return new Response(
             JSON.stringify({ error: 'Gagal menetapkan role admin' }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        
+
         // Verify role was set correctly
         const { data: verifyRole, error: verifyError } = await supabaseClient
           .from('user_roles')
@@ -221,10 +292,10 @@ Deno.serve(async (req) => {
 
         if (verifyError || verifyRole?.role !== 'admin_bkd') {
           console.error('Role verification failed');
-          
+
           // Cleanup: delete the created user
           await supabaseClient.auth.admin.deleteUser(authData.user.id);
-          
+
           return new Response(
             JSON.stringify({ error: 'Gagal memverifikasi role admin' }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -232,8 +303,8 @@ Deno.serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ 
-            success: true, 
+          JSON.stringify({
+            success: true,
             message: 'Admin berhasil dibuat',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -290,8 +361,8 @@ Deno.serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ 
-            success: true, 
+          JSON.stringify({
+            success: true,
             password,
             message: 'User berhasil dibuat. Simpan password ini untuk diberikan kepada user.',
           }),
@@ -414,10 +485,10 @@ Deno.serve(async (req) => {
         for (const user of users) {
           const validation = validateAndSanitize(user);
           if (!validation.valid) {
-            results.push({ 
-              no_peserta: user.no_peserta, 
-              success: false, 
-              error: validation.error 
+            results.push({
+              no_peserta: user.no_peserta,
+              success: false,
+              error: validation.error
             });
             continue;
           }
@@ -438,16 +509,16 @@ Deno.serve(async (req) => {
           });
 
           if (authError) {
-            results.push({ 
-              no_peserta: sanitizedData.no_peserta, 
-              success: false, 
-              error: authError.message 
+            results.push({
+              no_peserta: sanitizedData.no_peserta,
+              success: false,
+              error: authError.message
             });
           } else {
-            results.push({ 
-              no_peserta: sanitizedData.no_peserta, 
-              success: true, 
-              password 
+            results.push({
+              no_peserta: sanitizedData.no_peserta,
+              success: true,
+              password
             });
           }
         }
@@ -456,8 +527,8 @@ Deno.serve(async (req) => {
         const errorCount = results.filter(r => !r.success).length;
 
         return new Response(
-          JSON.stringify({ 
-            success: true, 
+          JSON.stringify({
+            success: true,
             results,
             summary: { successCount, errorCount }
           }),

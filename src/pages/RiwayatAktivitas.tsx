@@ -6,14 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, XCircle, Clock } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, User } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
 interface ActivityLog {
   id: string;
+  document_id: string;
   document_name: string;
   user_name: string;
+  admin_name: string;
   action: string;
   timestamp: string;
   catatan: string;
@@ -30,7 +32,7 @@ export default function RiwayatAktivitas() {
 
   const fetchActivityLogs = async () => {
     try {
-      // Get user documents with history
+      // 1. Fetch all verified/rejected documents
       const { data: userDocs, error: docsError } = await supabase
         .from('user_dokumen')
         .select(`
@@ -41,11 +43,11 @@ export default function RiwayatAktivitas() {
           user_id,
           status_verifikasi,
           verified_at,
-          profiles!user_dokumen_user_id_fkey(full_name)
+          dokumen:dokumen_id (
+            nama_dokumen
+          )
         `)
-        .in('status_verifikasi', ['verified', 'rejected'])
-        .not('verified_at', 'is', null)
-        .order('verified_at', { ascending: false });
+        .in('status_verifikasi', ['verified', 'rejected']);
 
       if (docsError) {
         console.error('Error fetching documents:', docsError);
@@ -58,34 +60,88 @@ export default function RiwayatAktivitas() {
         return;
       }
 
-      const logs: ActivityLog[] = [];
+      // 2. Collect all User IDs (PPPK) and Admin IDs
+      const userIds = new Set<string>();
+      const adminIds = new Set<string>();
+      const tempLogs: any[] = [];
 
-      // Build activity logs from verified documents
-      for (const doc of userDocs) {
-        // Cari catatan admin terakhir dari history
+      userDocs.forEach(doc => {
+        if (doc.user_id) userIds.add(doc.user_id);
+
         const history = doc.catatan_history as any[];
-        let adminMessage = doc.catatan_admin || '';
-        
+        let hasHistoryLog = false;
+        // Use document name from relation, fallback to file name if missing
+        const docName = (doc.dokumen as any)?.nama_dokumen || doc.file_name;
+
         if (Array.isArray(history) && history.length > 0) {
-          // Cari pesan admin terakhir
-          const adminMessages = history.filter((entry: any) => entry.type === 'admin');
-          if (adminMessages.length > 0) {
-            const lastAdminMessage = adminMessages[adminMessages.length - 1];
-            adminMessage = lastAdminMessage.message || adminMessage;
-          }
+          history.forEach((entry, index) => {
+            if (entry.type === 'admin') {
+              hasHistoryLog = true;
+              if (entry.admin_id) {
+                adminIds.add(entry.admin_id);
+              }
+              tempLogs.push({
+                document_id: doc.id,
+                document_name: docName,
+                user_id: doc.user_id,
+                action: entry.action || doc.status_verifikasi,
+                timestamp: entry.timestamp || doc.verified_at || new Date().toISOString(),
+                catatan: entry.message,
+                admin_id: entry.admin_id,
+                unique_key: `${doc.id}-${index}`
+              });
+            }
+          });
         }
 
-        logs.push({
-          id: doc.id,
-          document_name: doc.file_name,
-          user_name: (doc.profiles as any)?.full_name || 'Unknown',
-          action: doc.status_verifikasi,
-          timestamp: doc.verified_at || new Date().toISOString(),
-          catatan: adminMessage,
-        });
+        // Fallback for legacy data
+        if (!hasHistoryLog && (doc.status_verifikasi === 'verified' || doc.status_verifikasi === 'rejected')) {
+          tempLogs.push({
+            document_id: doc.id,
+            document_name: docName,
+            user_id: doc.user_id,
+            action: doc.status_verifikasi,
+            timestamp: doc.verified_at || new Date().toISOString(),
+            catatan: doc.catatan_admin || '',
+            admin_id: null,
+            unique_key: `${doc.id}-legacy`
+          });
+        }
+      });
+
+      // 3. Fetch All Profiles (Admins + Users)
+      const allProfileIds = new Set([...userIds, ...adminIds]);
+      const profilesMap: Record<string, string> = {};
+
+      if (allProfileIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', Array.from(allProfileIds));
+
+        if (profiles) {
+          profiles.forEach(p => {
+            profilesMap[p.id] = p.full_name;
+          });
+        }
       }
 
-      setActivities(logs);
+      // 4. Map logs with names
+      const finalLogs: ActivityLog[] = tempLogs.map(log => ({
+        id: log.unique_key,
+        document_id: log.document_id,
+        document_name: log.document_name,
+        user_name: profilesMap[log.user_id] || 'Unknown User',
+        admin_name: profilesMap[log.admin_id] || 'Admin',
+        action: log.action,
+        timestamp: log.timestamp,
+        catatan: log.catatan
+      }));
+
+      // 5. Sort by timestamp descending
+      finalLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setActivities(finalLogs);
     } catch (error) {
       console.error('Error fetching activity logs:', error);
     } finally {
@@ -100,7 +156,7 @@ export default function RiwayatAktivitas() {
       case 'rejected':
         return <XCircle className="h-5 w-5 text-red-600" />;
       default:
-        return <Clock className="h-5 w-5 text-yellow-600" />;
+        return <Clock className="h-5 w-5 text-blue-600" />;
     }
   };
 
@@ -111,14 +167,14 @@ export default function RiwayatAktivitas() {
       case 'rejected':
         return <Badge variant="destructive">Ditolak</Badge>;
       default:
-        return <Badge className="bg-yellow-600">Pending</Badge>;
+        return <Badge className="bg-blue-600">Direview</Badge>;
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         <Button
           variant="ghost"
@@ -129,68 +185,87 @@ export default function RiwayatAktivitas() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Kembali
         </Button>
-        
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Riwayat Aktivitas Verifikasi</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Semua aksi verifikasi dokumen dari admin
-            </p>
-          </CardHeader>
-        </Card>
 
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
-            ))}
-          </div>
-        ) : activities.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <p className="text-muted-foreground text-sm">
-                Belum ada aktivitas verifikasi
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {activities.map((activity) => (
-              <Card key={activity.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="mt-1">
-                      {getActionIcon(activity.action)}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-sm">{activity.document_name}</h3>
-                          {getActionBadge(activity.action)}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-1 text-sm">
-                        <p className="text-muted-foreground">
-                          <span className="font-medium">Pengguna:</span> {activity.user_name}
-                        </p>
-                        <p className="text-muted-foreground">
-                          <span className="font-medium">Waktu:</span> {format(new Date(activity.timestamp), "dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale })}
-                        </p>
-                        {activity.catatan && (
-                          <p className="text-muted-foreground">
-                            <span className="font-medium">Catatan Admin:</span> {activity.catatan}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">Riwayat Aktivitas Verifikasi</h1>
+          <p className="text-sm text-muted-foreground">
+            Log aktivitas verifikasi dokumen oleh admin
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                Belum ada aktivitas verifikasi yang tercatat
+              </div>
+            ) : (
+              <div className="relative w-full overflow-auto">
+                <table className="w-full caption-bottom text-sm">
+                  <thead className="[&_tr]:border-b">
+                    <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
+                        Waktu
+                      </th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
+                        Admin
+                      </th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                        Aktivitas
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="[&_tr:last-child]:border-0">
+                    {activities.map((activity) => (
+                      <tr
+                        key={activity.id}
+                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                      >
+                        <td className="p-4 align-middle">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            <span>
+                              {format(new Date(activity.timestamp), "dd MMM yyyy, HH:mm", { locale: idLocale })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">
+                              {activity.admin_name || '-'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{activity.user_name}</span>
+                              <span className="text-muted-foreground">-</span>
+                              <span>{activity.document_name}</span>
+                              {getActionBadge(activity.action)}
+                            </div>
+                            {activity.catatan && (
+                              <p className="text-xs text-muted-foreground">
+                                Catatan: {activity.catatan}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

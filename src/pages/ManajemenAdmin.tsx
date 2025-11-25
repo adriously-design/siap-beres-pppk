@@ -53,6 +53,7 @@ const ManajemenAdmin = () => {
   const [adminFormData, setAdminFormData] = useState({
     email: "",
     password: "",
+    full_name: "",
     verification_key: "",
   });
   const { toast } = useToast();
@@ -65,53 +66,67 @@ const ManajemenAdmin = () => {
   const fetchAdmins = async () => {
     try {
       setLoading(true);
-      
-      // Get admin user IDs from user_roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "admin_bkd");
 
-      if (rolesError) throw rolesError;
+      const { data, error } = await supabase.functions.invoke('admin-user-management', {
+        body: { action: 'list_admins' }
+      });
 
-      if (!rolesData || rolesData.length === 0) {
-        setAdmins([]);
-        return;
+      if (error || (data && data.error)) {
+        console.warn('Edge function failed, falling back to direct DB query:', error || data.error);
+        throw new Error('Fallback needed');
       }
 
-      const adminIds = rolesData.map(r => r.user_id);
-
-      // Get profiles for these admin IDs
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("id", adminIds)
-        .order("created_at", { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      // Get emails from auth.users via RPC or edge function if needed
-      // For now, we'll just show the profiles
-      const adminProfiles = profilesData?.map(profile => ({
-        id: profile.id,
-        full_name: profile.full_name,
-        email: undefined, // Email not accessible from profiles table
-      })) || [];
-      
-      setAdmins(adminProfiles);
+      setAdmins(data.admins || []);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      console.log('Using fallback method to fetch admins');
+
+      // Fallback: Fetch directly from database
+      try {
+        // Get admin user IDs from user_roles
+        const { data: rolesData, error: rolesError } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin_bkd");
+
+        if (rolesError) throw rolesError;
+
+        if (!rolesData || rolesData.length === 0) {
+          setAdmins([]);
+          return;
+        }
+
+        const adminIds = rolesData.map(r => r.user_id);
+
+        // Get profiles for these admin IDs
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", adminIds)
+          .order("created_at", { ascending: false });
+
+        if (profilesError) throw profilesError;
+
+        const adminProfiles = profilesData?.map(profile => ({
+          id: profile.id,
+          full_name: profile.full_name,
+          email: "Hidden (Need Deployment)", // Placeholder
+        })) || [];
+
+        setAdmins(adminProfiles);
+      } catch (dbError: any) {
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data admin: " + dbError.message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddAdmin = async () => {
-    if (!adminFormData.email || !adminFormData.password || !adminFormData.verification_key) {
+    if (!adminFormData.email || !adminFormData.password || !adminFormData.full_name || !adminFormData.verification_key) {
       toast({
         title: "Error",
         description: "Semua field harus diisi",
@@ -122,22 +137,26 @@ const ManajemenAdmin = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
-        body: { 
+        body: {
           action: 'create_admin',
           email: adminFormData.email,
           password: adminFormData.password,
+          userData: {
+            full_name: adminFormData.full_name
+          },
           verification_key: adminFormData.verification_key,
         },
       });
 
       if (error) throw error;
+      if (data.error) throw new Error(data.error);
 
       toast({
         title: "Sukses",
         description: "Admin baru berhasil dibuat",
       });
 
-      setAdminFormData({ email: "", password: "", verification_key: "" });
+      setAdminFormData({ email: "", password: "", full_name: "", verification_key: "" });
       setAddAdminDialogOpen(false);
       fetchAdmins();
     } catch (error: any) {
@@ -177,7 +196,7 @@ const ManajemenAdmin = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('admin-user-management', {
-        body: { 
+        body: {
           action: 'delete',
           userId: selectedAdmin.id
         },
@@ -248,6 +267,16 @@ const ManajemenAdmin = () => {
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
+                      <Label htmlFor="admin-fullname">Nama Lengkap</Label>
+                      <Input
+                        id="admin-fullname"
+                        type="text"
+                        value={adminFormData.full_name}
+                        onChange={(e) => setAdminFormData({ ...adminFormData, full_name: e.target.value })}
+                        placeholder="Nama Lengkap Admin"
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="admin-email">Email</Label>
                       <Input
                         id="admin-email"
@@ -298,6 +327,7 @@ const ManajemenAdmin = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nama Lengkap</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
@@ -305,7 +335,7 @@ const ManajemenAdmin = () => {
                 <TableBody>
                   {admins.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
                         Belum ada data admin
                       </TableCell>
                     </TableRow>
@@ -313,6 +343,7 @@ const ManajemenAdmin = () => {
                     admins.map((admin) => (
                       <TableRow key={admin.id}>
                         <TableCell>{admin.full_name}</TableCell>
+                        <TableCell>{admin.email}</TableCell>
                         <TableCell>
                           <Badge variant="destructive">
                             <Shield className="h-3 w-3 mr-1" /> Admin BKD
@@ -356,6 +387,10 @@ const ManajemenAdmin = () => {
                 <div>
                   <Label className="text-muted-foreground">Nama Lengkap</Label>
                   <p className="font-medium">{selectedAdmin.full_name}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Email</Label>
+                  <p className="font-medium">{selectedAdmin.email}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Role</Label>

@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import AuthPPPK from "./pages/AuthPPPK";
 import AuthAdmin from "./pages/AuthAdmin";
+import DebugAdmin from "./pages/DebugAdmin";
 import ResetPasswordPPPK from "./pages/ResetPasswordPPPK";
 import DashboardPPPK from "./pages/DashboardPPPK";
 import DashboardAdmin from "./pages/DashboardAdmin";
@@ -37,85 +38,86 @@ const App = () => (
               <Route path="/auth-pppk" element={<AuthPPPK />} />
               <Route path="/reset-password-pppk" element={<ResetPasswordPPPK />} />
               <Route path="/auth-admin" element={<AuthAdmin />} />
-              <Route 
-                path="/dashboard-pppk" 
+              <Route path="/debug-admin" element={<DebugAdmin />} />
+              <Route
+                path="/dashboard-pppk"
                 element={
                   <ProtectedRoute allowedRoles={['calon_pppk']}>
                     <DashboardPPPK />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/dashboard-admin" 
+              <Route
+                path="/dashboard-admin"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <DashboardAdmin />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/manajemen-pengguna" 
+              <Route
+                path="/manajemen-pengguna"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <ManajemenPengguna />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/manajemen-admin" 
+              <Route
+                path="/manajemen-admin"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <ManajemenAdmin />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/upload-dokumen" 
+              <Route
+                path="/upload-dokumen"
                 element={
                   <ProtectedRoute allowedRoles={['calon_pppk']}>
                     <UploadDokumen />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/e-bimtek" 
+              <Route
+                path="/e-bimtek"
                 element={
                   <ProtectedRoute allowedRoles={['calon_pppk']}>
                     <EBimtek />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/kelola-e-bimtek" 
+              <Route
+                path="/kelola-e-bimtek"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <KelolaEBimtek />
                   </ProtectedRoute>
-                } 
+                }
               />
               <Route
-                path="/review-dokumen" 
+                path="/review-dokumen"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <ReviewDokumen />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/review-dokumen/:userId" 
+              <Route
+                path="/review-dokumen/:userId"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <ReviewDokumenDetail />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/riwayat-aktivitas" 
+              <Route
+                path="/riwayat-aktivitas"
                 element={
                   <ProtectedRoute allowedRoles={['admin_bkd']}>
                     <RiwayatAktivitas />
                   </ProtectedRoute>
-                } 
+                }
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

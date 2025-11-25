@@ -1,23 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-
-const pppkLoginSchema = z.object({
-  no_peserta: z.string().min(1, "No Peserta harus diisi").max(50, "No Peserta terlalu panjang"),
-  password: z.string().min(1, "Password harus diisi"),
-});
+import { pppkLoginSchema } from "@/lib/schemas";
+import { useLogin } from "@/hooks/useAuth";
 
 const AuthPPPK = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { login, loading } = useLogin();
   const [formData, setFormData] = useState({
     no_peserta: "",
     password: "",
@@ -25,37 +21,12 @@ const AuthPPPK = () => {
 
   const handlePPPKLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
     try {
       const validated = pppkLoginSchema.parse(formData);
       const email = `${validated.no_peserta}@pppk.bkd.ntt.go.id`;
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: formData.password,
-      });
 
-      if (error) throw error;
-
-      // Fetch user role to determine redirect
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', data.user.id)
-        .single();
-
-      // Redirect based on role
-      if (roleData?.role === 'admin_bkd') {
-        navigate("/dashboard-admin");
-      } else {
-        navigate("/dashboard-pppk");
-      }
-
-      toast({
-        title: "Login Berhasil",
-        description: "Selamat datang di SIAP BERES",
-      });
+      await login(email, formData.password);
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({
@@ -63,15 +34,7 @@ const AuthPPPK = () => {
           description: error.errors[0].message,
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Login Gagal",
-          description: "No Peserta atau password tidak valid",
-          variant: "destructive",
-        });
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -117,9 +80,9 @@ const AuthPPPK = () => {
                 "Login"
               )}
             </Button>
-            <Button 
-              type="button" 
-              variant="link" 
+            <Button
+              type="button"
+              variant="link"
               className="w-full text-primary"
               onClick={() => navigate('/reset-password-pppk')}
             >
