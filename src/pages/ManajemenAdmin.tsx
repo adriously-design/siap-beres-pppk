@@ -71,55 +71,22 @@ const ManajemenAdmin = () => {
         body: { action: 'list_admins' }
       });
 
-      if (error || (data && data.error)) {
-        console.warn('Edge function failed, falling back to direct DB query:', error || data.error);
-        throw new Error('Fallback needed');
+      if (error) {
+        throw error;
+      }
+
+      if (data && data.error) {
+        throw new Error(data.error);
       }
 
       setAdmins(data.admins || []);
     } catch (error: any) {
-      console.log('Using fallback method to fetch admins');
-
-      // Fallback: Fetch directly from database
-      try {
-        // Get admin user IDs from user_roles
-        const { data: rolesData, error: rolesError } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .eq("role", "admin_bkd");
-
-        if (rolesError) throw rolesError;
-
-        if (!rolesData || rolesData.length === 0) {
-          setAdmins([]);
-          return;
-        }
-
-        const adminIds = rolesData.map(r => r.user_id);
-
-        // Get profiles for these admin IDs
-        const { data: profilesData, error: profilesError } = await supabase
-          .from("profiles")
-          .select("*")
-          .in("id", adminIds)
-          .order("created_at", { ascending: false });
-
-        if (profilesError) throw profilesError;
-
-        const adminProfiles = profilesData?.map(profile => ({
-          id: profile.id,
-          full_name: profile.full_name,
-          email: "Hidden (Need Deployment)", // Placeholder
-        })) || [];
-
-        setAdmins(adminProfiles);
-      } catch (dbError: any) {
-        toast({
-          title: "Error",
-          description: "Gagal mengambil data admin: " + dbError.message,
-          variant: "destructive",
-        });
-      }
+      console.error('Error fetching admins:', error);
+      toast({
+        title: "Error",
+        description: "Gagal mengambil data admin: " + error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

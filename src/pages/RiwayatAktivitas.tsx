@@ -25,6 +25,8 @@ export default function RiwayatAktivitas() {
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
     fetchActivityLogs();
@@ -171,6 +173,12 @@ export default function RiwayatAktivitas() {
     }
   };
 
+  // Calculate pagination
+  const totalPages = Math.ceil(activities.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedActivities = activities.slice(startIndex, endIndex);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -206,63 +214,105 @@ export default function RiwayatAktivitas() {
                 Belum ada aktivitas verifikasi yang tercatat
               </div>
             ) : (
-              <div className="relative w-full overflow-auto">
-                <table className="w-full caption-bottom text-sm">
-                  <thead className="[&_tr]:border-b">
-                    <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
-                        Waktu
-                      </th>
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
-                        Nama Admin
-                      </th>
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                        Aktivitas
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="[&_tr:last-child]:border-0">
-                    {activities.map((activity) => (
-                      <tr
-                        key={activity.id}
-                        className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                      >
-                        <td className="p-4 align-middle">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span>
-                              {format(new Date(activity.timestamp), "dd MMM yyyy, HH:mm", { locale: idLocale })}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-4 align-middle">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">
-                              {activity.admin_name || '-'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-4 align-middle">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{activity.user_name}</span>
-                              <span className="text-muted-foreground">-</span>
-                              <span>{activity.document_name}</span>
-                              {getActionBadge(activity.action)}
-                            </div>
-                            {activity.catatan && (
-                              <p className="text-xs text-muted-foreground">
-                                Catatan: {activity.catatan}
-                              </p>
-                            )}
-                          </div>
-                        </td>
+              <>
+                <div className="relative w-full overflow-auto">
+                  <table className="w-full caption-bottom text-sm">
+                    <thead className="[&_tr]:border-b">
+                      <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
+                          Waktu
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
+                          Nama Admin
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Aktivitas
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="[&_tr:last-child]:border-0">
+                      {paginatedActivities.map((activity) => (
+                        <tr
+                          key={activity.id}
+                          className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                        >
+                          <td className="p-4 align-middle">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span>
+                                {format(new Date(activity.timestamp), "dd MMM yyyy, HH:mm", { locale: idLocale })}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4 align-middle">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">
+                                {activity.admin_name || '-'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4 align-middle">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{activity.user_name}</span>
+                                <span className="text-muted-foreground">-</span>
+                                <span>{activity.document_name}</span>
+                                {getActionBadge(activity.action)}
+                              </div>
+                              {activity.catatan && (
+                                <p className="text-xs text-muted-foreground">
+                                  Catatan: {activity.catatan}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Menampilkan {startIndex + 1}-{Math.min(endIndex, activities.length)} dari {activities.length} aktivitas
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Sebelumnya
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                            className="w-9"
+                          >
+                            {page}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Selanjutnya
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
