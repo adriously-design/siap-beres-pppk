@@ -214,7 +214,7 @@ export default function RiwayatAktivitas() {
                         Waktu
                       </th>
                       <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[200px]">
-                        Admin
+                        Nama Admin
                       </th>
                       <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                         Aktivitas

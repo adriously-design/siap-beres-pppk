@@ -136,6 +136,8 @@ export default function ReviewDokumenDetail() {
       const currentDoc = documents.find(d => d.id === docId);
       const currentHistory = currentDoc?.catatan_history || [];
 
+      const { data: { user } } = await supabase.auth.getUser();
+
       // Add new message to history if there's an admin note
       const newHistory = adminNotes[docId]?.trim()
         ? [
@@ -143,7 +145,9 @@ export default function ReviewDokumenDetail() {
           {
             type: 'admin',
             message: adminNotes[docId],
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            admin_id: user?.id,
+            action: status
           }
         ]
         : currentHistory;
