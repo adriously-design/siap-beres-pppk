@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 
 export const useLogin = () => {
@@ -47,9 +48,9 @@ export const useLogin = () => {
                 description: "Selamat datang di SIAP BERES",
             });
 
-            return true;
+      return true;
         } catch (error: any) {
-            console.error("Login error:", error);
+            logger.error("Login error:", error);
             toast({
                 title: "Login Gagal",
                 description: error.message || "Email atau password tidak valid",

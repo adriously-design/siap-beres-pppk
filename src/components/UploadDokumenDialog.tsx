@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -146,7 +147,7 @@ export function UploadDokumenDialog({
 
       onSuccess();
     } catch (error) {
-      console.error('Error uploading file:', error);
+      logger.error('Error uploading file:', error);
       toast({
         title: "Error",
         description: "Gagal mengupload dokumen",
