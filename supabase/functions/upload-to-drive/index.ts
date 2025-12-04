@@ -28,23 +28,23 @@ async function createAwsSignature(
   const encoder = new TextEncoder();
   const algorithm = 'AWS4-HMAC-SHA256';
   const service = 's3';
-  
+
   const now = new Date();
   const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
-  
+
   // Create canonical request
   const canonicalUri = url.pathname;
   const canonicalQuerystring = '';
-  
+
   const signedHeaders = Object.keys(headers).sort().join(';');
   const canonicalHeaders = Object.keys(headers).sort()
     .map(key => `${key}:${headers[key]}\n`)
     .join('');
-  
+
   // Use the payload hash from headers
   const payloadHash = headers['x-amz-content-sha256'];
-  
+
   const canonicalRequest = [
     method,
     canonicalUri,
@@ -53,21 +53,21 @@ async function createAwsSignature(
     signedHeaders,
     payloadHash
   ].join('\n');
-  
+
   // Create string to sign
   const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
   const canonicalRequestHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest));
   const canonicalRequestHash = Array.from(new Uint8Array(canonicalRequestHashBuffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-  
+
   const stringToSign = [
     algorithm,
     amzDate,
     credentialScope,
     canonicalRequestHash
   ].join('\n');
-  
+
   // Calculate signature
   async function hmac(key: ArrayBuffer, data: string): Promise<ArrayBuffer> {
     const cryptoKey = await crypto.subtle.importKey(
@@ -79,7 +79,7 @@ async function createAwsSignature(
     );
     return await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
   }
-  
+
   let key: ArrayBuffer = encoder.encode(`AWS4${secretAccessKey}`).buffer;
   key = await hmac(key, dateStamp);
   key = await hmac(key, region);
@@ -89,10 +89,10 @@ async function createAwsSignature(
   const signature = Array.from(new Uint8Array(signatureArray))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-  
+
   // Create authorization header
   const authorization = `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  
+
   return {
     ...headers,
     'Authorization': authorization,
@@ -147,43 +147,62 @@ serve(async (req) => {
 
     // ============ SERVER-SIDE FILE VALIDATION (FIX ISU #3) ============
     console.log('Validating file...');
-    
+
     // 1. Validate file size server-side (maximum 5MB = 5120KB)
     const maxSizeKb = 5120;
     if (fileSizeKb > maxSizeKb) {
       throw new Error(`Ukuran file terlalu besar. Maksimal ${maxSizeKb / 1024}MB`);
     }
-    
+
     // Validate actual binary size matches reported size
     const actualSizeKb = Math.ceil(binaryData.length / 1024);
     if (Math.abs(actualSizeKb - fileSizeKb) > 10) { // Allow 10KB tolerance
       console.warn(`File size mismatch: reported=${fileSizeKb}KB, actual=${actualSizeKb}KB`);
     }
 
-    // 2. Validate PDF signature (magic bytes)
-    // PDF files must start with %PDF (hex: 25 50 44 46)
-    const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
-    const isPdfBySignature = pdfSignature.every((byte, index) => binaryData[index] === byte);
-    
-    if (!isPdfBySignature) {
-      console.error('Invalid PDF signature. First 8 bytes:', Array.from(binaryData.slice(0, 8)));
-      throw new Error('File bukan PDF yang valid. Upload gagal untuk keamanan.');
+    // 2. Validate file signature (magic bytes)
+    const isPdf = mimeType.includes('pdf');
+    const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg');
+    const isPng = mimeType.includes('png');
+
+    if (isPdf) {
+      // PDF files must start with %PDF (hex: 25 50 44 46)
+      const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
+      const isPdfBySignature = pdfSignature.every((byte, index) => binaryData[index] === byte);
+
+      if (!isPdfBySignature) {
+        console.error('Invalid PDF signature. First 8 bytes:', Array.from(binaryData.slice(0, 8)));
+        throw new Error('File bukan PDF yang valid.');
+      }
+
+      // Additional PDF structure validation
+      const fileEnd = new TextDecoder().decode(binaryData.slice(-1024)); // Last 1KB
+      if (!fileEnd.includes('%%EOF')) {
+        console.warn('PDF file might be corrupted: missing %%EOF marker');
+      }
+    } else if (isJpeg) {
+      // JPEG files must start with FF D8 FF
+      const jpegSignature = [0xFF, 0xD8, 0xFF];
+      const isJpegBySignature = jpegSignature.every((byte, index) => binaryData[index] === byte);
+
+      if (!isJpegBySignature) {
+        throw new Error('File bukan JPEG/JPG yang valid.');
+      }
+    } else if (isPng) {
+      // PNG files must start with 89 50 4E 47 0D 0A 1A 0A
+      const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      const isPngBySignature = pngSignature.every((byte, index) => binaryData[index] === byte);
+
+      if (!isPngBySignature) {
+        throw new Error('File bukan PNG yang valid.');
+      }
+    } else {
+      // If strict validation is required, uncomment below:
+      // throw new Error('Format file tidak didukung. Hanya PDF, JPG, dan PNG yang diperbolehkan.');
+      console.warn('Unknown file format uploaded:', mimeType);
     }
-    
-    // 3. Validate MIME type matches PDF
-    if (!mimeType.includes('pdf')) {
-      throw new Error('Tipe file tidak valid. Hanya PDF yang diperbolehkan.');
-    }
-    
-    // 4. Additional PDF structure validation
-    // Check if file contains PDF trailer (should have %%EOF near end)
-    const fileEnd = new TextDecoder().decode(binaryData.slice(-1024)); // Last 1KB
-    if (!fileEnd.includes('%%EOF')) {
-      console.warn('PDF file might be corrupted: missing %%EOF marker');
-      // Don't block, but log warning
-    }
-    
-    console.log('File validation passed: PDF signature valid, size OK');
+
+    console.log('File validation passed for type:', mimeType);
 
     // ============ RATE LIMITING FOR UPLOADS ============
     const uploadIdentifier = `upload:${user.id}`;
@@ -202,25 +221,25 @@ serve(async (req) => {
     }
 
     console.log('Uploading file to R2...');
-    
+
     // Prepare R2 upload using AWS Signature V4
     const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
     const url = new URL(`/${bucketName}/${filePath}`, endpoint);
-    
+
     // Calculate payload hash first for x-amz-content-sha256 header
     const payloadBuffer = binaryData.buffer.slice(binaryData.byteOffset, binaryData.byteOffset + binaryData.byteLength) as ArrayBuffer;
     const payloadHashBuffer = await crypto.subtle.digest('SHA-256', payloadBuffer);
     const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
-    
+
     const headers: Record<string, string> = {
       'host': url.host,
       'content-type': mimeType,
       'content-length': binaryData.length.toString(),
       'x-amz-content-sha256': payloadHash,
     };
-    
+
     const signedHeaders = await createAwsSignature(
       'PUT',
       url,
@@ -264,7 +283,7 @@ serve(async (req) => {
             'host': deleteUrl.host,
             'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', // empty payload hash
           };
-          
+
           const signedDeleteHeaders = await createAwsSignature(
             'DELETE',
             deleteUrl,
@@ -286,15 +305,15 @@ serve(async (req) => {
       }
 
       const existingHistory = Array.isArray(existingDoc.catatan_history) ? existingDoc.catatan_history : [];
-      const newHistory = userNote?.trim() 
+      const newHistory = userNote?.trim()
         ? [
-            ...existingHistory,
-            {
-              type: 'user',
-              message: userNote,
-              timestamp: new Date().toISOString()
-            }
-          ]
+          ...existingHistory,
+          {
+            type: 'user',
+            message: userNote,
+            timestamp: new Date().toISOString()
+          }
+        ]
         : existingHistory;
 
       // Update existing record - store path only, not full URL
@@ -341,13 +360,13 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         filePath,
       }),
-      { 
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
+        status: 200
       }
     );
 
@@ -356,9 +375,9 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { 
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400 
+        status: 400
       }
     );
   }
