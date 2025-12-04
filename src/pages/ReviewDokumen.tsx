@@ -73,8 +73,7 @@ export default function ReviewDokumen() {
     try {
       const { count: docsCount } = await supabase
         .from('dokumen')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_required', true);
+        .select('*', { count: 'exact', head: true });
 
       const { data: userRoles } = await supabase
         .from('user_roles')
