@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,7 +82,7 @@ const ManajemenAdmin = () => {
 
       setAdmins(data.admins || []);
     } catch (error: any) {
-      console.error('Error fetching admins:', error);
+      logger.error('Error fetching admins:', error);
       toast({
         title: "Error",
         description: "Gagal mengambil data admin: " + error.message,

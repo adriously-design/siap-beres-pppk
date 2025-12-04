@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ export default function UploadDokumen() {
       setDokumenList(dokumen || []);
       setUserDokumen(userDocs || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
       toast({
         title: "Error",
         description: "Gagal memuat data dokumen",
@@ -140,7 +141,7 @@ export default function UploadDokumen() {
       const { presignedUrl } = await response.json();
       window.open(presignedUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      console.error('Error previewing file:', error);
+      logger.error('Error previewing file:', error);
       toast({
         title: "Error",
         description: "Gagal membuka file",
@@ -184,7 +185,7 @@ export default function UploadDokumen() {
 
       fetchData();
     } catch (error) {
-      console.error('Error deleting file:', error);
+      logger.error('Error deleting file:', error);
       toast({
         title: "Error",
         description: "Gagal menghapus dokumen",

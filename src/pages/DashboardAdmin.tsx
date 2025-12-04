@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -102,7 +103,7 @@ export default function DashboardAdmin() {
         rejectedDocs,
       });
     } catch (error) {
-      console.error('Error fetching admin stats:', error);
+      logger.error('Error fetching admin stats:', error);
     } finally {
       setLoading(false);
     }

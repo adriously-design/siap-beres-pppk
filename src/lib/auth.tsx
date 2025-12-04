@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
@@ -70,7 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
       setUserRole(data?.role || null);
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      logger.error('Error fetching user role:', error);
       setUserRole(null);
     } finally {
       setLoading(false);

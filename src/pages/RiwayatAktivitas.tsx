@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default function RiwayatAktivitas() {
         .in('status_verifikasi', ['verified', 'rejected']);
 
       if (docsError) {
-        console.error('Error fetching documents:', docsError);
+        logger.error('Error fetching documents:', docsError);
         setLoading(false);
         return;
       }
@@ -145,7 +146,7 @@ export default function RiwayatAktivitas() {
 
       setActivities(finalLogs);
     } catch (error) {
-      console.error('Error fetching activity logs:', error);
+      logger.error('Error fetching activity logs:', error);
     } finally {
       setLoading(false);
     }

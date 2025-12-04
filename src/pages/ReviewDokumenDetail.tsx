@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,7 @@ export default function ReviewDokumenDetail() {
         setAdminNotes(notes);
       }
     } catch (error) {
-      console.error('Error fetching documents:', error);
+      logger.error('Error fetching documents:', error);
       toast({
         title: "Error",
         description: "Gagal memuat data dokumen",
@@ -121,7 +122,7 @@ export default function ReviewDokumenDetail() {
       const { presignedUrl } = await response.json();
       window.open(presignedUrl, '_blank');
     } catch (error) {
-      console.error('Error previewing file:', error);
+      logger.error('Error previewing file:', error);
       toast({
         title: "Error",
         description: "Gagal membuka file",
@@ -171,7 +172,7 @@ export default function ReviewDokumenDetail() {
 
       fetchUserDocuments();
     } catch (error) {
-      console.error('Error updating document:', error);
+      logger.error('Error updating document:', error);
       toast({
         title: "Error",
         description: "Gagal mengupdate status dokumen",
@@ -261,7 +262,7 @@ export default function ReviewDokumenDetail() {
       setBatchNote("");
       fetchUserDocuments();
     } catch (error) {
-      console.error('Error updating documents:', error);
+      logger.error('Error updating documents:', error);
       toast({
         title: "Error",
         description: "Gagal memperbarui dokumen",
