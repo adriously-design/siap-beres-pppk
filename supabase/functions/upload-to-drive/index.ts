@@ -160,49 +160,38 @@ serve(async (req) => {
       console.warn(`File size mismatch: reported=${fileSizeKb}KB, actual=${actualSizeKb}KB`);
     }
 
-    // 2. Validate file signature (magic bytes)
-    const isPdf = mimeType.includes('pdf');
-    const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg');
-    const isPng = mimeType.includes('png');
+    // 2. Detect actual file type from magic bytes (don't trust client mimeType)
+    const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
+    const jpegSignature = [0xFF, 0xD8, 0xFF];
+    const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    if (isPdf) {
-      // PDF files must start with %PDF (hex: 25 50 44 46)
-      const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
-      const isPdfBySignature = pdfSignature.every((byte, index) => binaryData[index] === byte);
+    const isPdfBySignature = pdfSignature.every((byte, index) => binaryData[index] === byte);
+    const isJpegBySignature = jpegSignature.every((byte, index) => binaryData[index] === byte);
+    const isPngBySignature = pngSignature.every((byte, index) => binaryData[index] === byte);
 
-      if (!isPdfBySignature) {
-        console.error('Invalid PDF signature. First 8 bytes:', Array.from(binaryData.slice(0, 8)));
-        throw new Error('File bukan PDF yang valid.');
-      }
+    let detectedType = 'unknown';
+    let actualMimeType = mimeType;
 
+    if (isPdfBySignature) {
+      detectedType = 'pdf';
+      actualMimeType = 'application/pdf';
       // Additional PDF structure validation
       const fileEnd = new TextDecoder().decode(binaryData.slice(-1024)); // Last 1KB
       if (!fileEnd.includes('%%EOF')) {
         console.warn('PDF file might be corrupted: missing %%EOF marker');
       }
-    } else if (isJpeg) {
-      // JPEG files must start with FF D8 FF
-      const jpegSignature = [0xFF, 0xD8, 0xFF];
-      const isJpegBySignature = jpegSignature.every((byte, index) => binaryData[index] === byte);
-
-      if (!isJpegBySignature) {
-        throw new Error('File bukan JPEG/JPG yang valid.');
-      }
-    } else if (isPng) {
-      // PNG files must start with 89 50 4E 47 0D 0A 1A 0A
-      const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-      const isPngBySignature = pngSignature.every((byte, index) => binaryData[index] === byte);
-
-      if (!isPngBySignature) {
-        throw new Error('File bukan PNG yang valid.');
-      }
+    } else if (isJpegBySignature) {
+      detectedType = 'jpeg';
+      actualMimeType = 'image/jpeg';
+    } else if (isPngBySignature) {
+      detectedType = 'png';
+      actualMimeType = 'image/png';
     } else {
-      // If strict validation is required, uncomment below:
-      // throw new Error('Format file tidak didukung. Hanya PDF, JPG, dan PNG yang diperbolehkan.');
-      console.warn('Unknown file format uploaded:', mimeType);
+      console.error('Unknown file signature. First 8 bytes:', Array.from(binaryData.slice(0, 8)));
+      throw new Error('Format file tidak didukung. Hanya PDF, JPG, dan PNG yang diperbolehkan.');
     }
 
-    console.log('File validation passed for type:', mimeType);
+    console.log(`File validation passed. Detected type: ${detectedType}, mimeType: ${actualMimeType}`);
 
     // ============ RATE LIMITING FOR UPLOADS ============
     const uploadIdentifier = `upload:${user.id}`;
@@ -235,7 +224,7 @@ serve(async (req) => {
 
     const headers: Record<string, string> = {
       'host': url.host,
-      'content-type': mimeType,
+      'content-type': actualMimeType,
       'content-length': binaryData.length.toString(),
       'x-amz-content-sha256': payloadHash,
     };
