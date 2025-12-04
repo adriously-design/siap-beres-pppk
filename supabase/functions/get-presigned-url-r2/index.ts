@@ -1,6 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.42.0';
-import { S3Client, GetObjectCommand } from 'https://esm.sh/@aws-sdk/client-s3@3.556.0';
-import { getSignedUrl } from 'https://esm.sh/@aws-sdk/s3-request-presigner@3.556.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +7,91 @@ const corsHeaders = {
 
 interface RequestBody {
   dokumenId: string;
+}
+
+// AWS Signature V4 helper for presigned URLs
+async function createPresignedUrl(
+  method: string,
+  url: URL,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string,
+  expiresIn: number = 300
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const algorithm = 'AWS4-HMAC-SHA256';
+  const service = 's3';
+
+  const now = new Date();
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const credential = `${accessKeyId}/${credentialScope}`;
+
+  // Build query parameters for presigned URL
+  const queryParams = new URLSearchParams({
+    'X-Amz-Algorithm': algorithm,
+    'X-Amz-Credential': credential,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': expiresIn.toString(),
+    'X-Amz-SignedHeaders': 'host',
+  });
+
+  // Create canonical request
+  const canonicalUri = url.pathname;
+  const canonicalQuerystring = queryParams.toString().split('&').sort().join('&');
+  const canonicalHeaders = `host:${url.host}\n`;
+  const signedHeaders = 'host';
+  const payloadHash = 'UNSIGNED-PAYLOAD';
+
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQuerystring,
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  // Create string to sign
+  const canonicalRequestHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest));
+  const canonicalRequestHash = Array.from(new Uint8Array(canonicalRequestHashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  const stringToSign = [
+    algorithm,
+    amzDate,
+    credentialScope,
+    canonicalRequestHash,
+  ].join('\n');
+
+  // Calculate signature using HMAC
+  async function hmac(key: ArrayBuffer, data: string): Promise<ArrayBuffer> {
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    return await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
+  }
+
+  let key: ArrayBuffer = encoder.encode(`AWS4${secretAccessKey}`).buffer as ArrayBuffer;
+  key = await hmac(key, dateStamp);
+  key = await hmac(key, region);
+  key = await hmac(key, service);
+  key = await hmac(key, 'aws4_request');
+  const signatureArray = await hmac(key, stringToSign);
+  const signature = Array.from(new Uint8Array(signatureArray))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Build final presigned URL
+  queryParams.append('X-Amz-Signature', signature);
+  return `${url.origin}${url.pathname}?${queryParams.toString()}`;
 }
 
 Deno.serve(async (req) => {
@@ -38,6 +121,7 @@ Deno.serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (userError || !user) {
+      console.error('Auth error:', userError?.message || 'No user found');
       throw new Error('Unauthorized');
     }
 
@@ -90,21 +174,17 @@ Deno.serve(async (req) => {
 
     console.log('Generating presigned URL for file:', fileKey);
 
-    const s3Client = new S3Client({
-      region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: accessKeyId,
-        secretAccessKey: secretAccessKey,
-      },
-    });
+    const r2Endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+    const objectUrl = new URL(`/${bucketName}/${fileKey}`, r2Endpoint);
 
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: fileKey,
-    });
-
-    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    const presignedUrl = await createPresignedUrl(
+      'GET',
+      objectUrl,
+      accessKeyId,
+      secretAccessKey,
+      'auto',
+      300 // 5 minutes expiry
+    );
 
     console.log('Presigned URL generated successfully');
 
