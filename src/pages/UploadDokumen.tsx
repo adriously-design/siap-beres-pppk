@@ -300,8 +300,16 @@ export default function UploadDokumen() {
                         </div>
                         
                         {userDoc.catatan_admin && (
-                          <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded">
-                            <p className="text-xs font-medium text-destructive mb-1">Catatan Admin:</p>
+                          <div className={`mt-2 p-2 rounded border ${
+                            userDoc.status_verifikasi === 'verified' 
+                              ? 'bg-green-500/10 border-green-500/20' 
+                              : 'bg-destructive/10 border-destructive/20'
+                          }`}>
+                            <p className={`text-xs font-medium mb-1 ${
+                              userDoc.status_verifikasi === 'verified' 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : 'text-destructive'
+                            }`}>Catatan Admin:</p>
                             <p className="text-xs">{userDoc.catatan_admin}</p>
                           </div>
                         )}
